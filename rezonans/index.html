@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Резонанс</title>
+<style>
+  html,body{margin:0;height:100%;background:#07040f;overflow:hidden;touch-action:none;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#f3eaff}
+  canvas{display:block;width:100vw;height:100vh}
+  #hud{position:fixed;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;
+    padding:14px 18px;pointer-events:none;font-weight:700}
+  #score{font-size:44px;line-height:1;text-shadow:0 0 18px #ff66cc88}
+  #best{font-size:14px;opacity:.7;margin-top:6px}
+  #lives{font-size:20px;letter-spacing:4px;margin-top:6px;color:#ff6fb5}
+  #mute{pointer-events:auto;background:#ffffff14;border:1px solid #ffffff30;color:#fff;border-radius:12px;
+    width:44px;height:44px;font-size:20px;cursor:pointer}
+  .screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:16px;background:radial-gradient(circle at center,#1a0a30cc,#05020add);text-align:center;padding:24px}
+  .hidden{display:none!important}
+  h1{font-size:clamp(38px,10vw,72px);margin:0;letter-spacing:.06em;
+    background:linear-gradient(90deg,#ff7ac8,#8f7bff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  h2{margin:0;font-size:30px}
+  p{margin:0;opacity:.8;max-width:420px;line-height:1.45}
+  .final{font-size:72px;font-weight:800;line-height:1}
+  .tag{color:#ffd66b;font-weight:700;min-height:1.4em}
+  button.big{font:inherit;font-size:22px;font-weight:700;padding:14px 34px;border-radius:16px;border:0;cursor:pointer;
+    color:#0b0516;background:linear-gradient(90deg,#ff7ac8,#8f7bff);box-shadow:0 0 24px #ff7ac866;min-width:240px}
+  button.alt{background:#ffffff18;color:#fff;box-shadow:none;border:1px solid #ffffff40;font-size:18px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <div><div id="score">0</div><div id="best"></div><div id="lives"></div></div>
+  <button id="mute" aria-label="sound">🔊</button>
+</div>
+
+<div id="menu" class="screen">
+  <h1 data-i="title"></h1>
+  <p data-i="hint"></p>
+  <button class="big" id="playBtn" data-i="play"></button>
+</div>
+
+<div id="over" class="screen hidden">
+  <h2 data-i="over"></h2>
+  <div class="final" id="final">0</div>
+  <div class="tag" id="tag"></div>
+  <button class="big" id="contBtn"></button>
+  <button class="big alt" id="againBtn" data-i="again"></button>
+</div>
+
+<div id="pause" class="screen hidden">
+  <h2 data-i="paused"></h2>
+  <button class="big" id="resumeBtn" data-i="resume"></button>
+</div>
+
+<script>
+"use strict";
+// ---------- локализация ----------
+const I18N = {
+  ru: { title:"РЕЗОНАНС", hint:"Пульс расходится по кругу. Нажмите на экран или пробел, когда он совпадёт с кольцом. Чем точнее, тем больше очков.",
+        play:"Играть", again:"Ещё раз", cont:"▶ +1 жизнь за рекламу", contFree:"+1 жизнь", over:"Резонанс потерян",
+        best:"Рекорд", newBest:"Новый рекорд!", paused:"Пауза", resume:"Продолжить",
+        perfect:"Идеально!", good:"Хорошо", miss:"Мимо", combo:"Серия" },
+  en: { title:"RESONANCE", hint:"A pulse spreads out. Tap or press Space when it matches the ring. The more precise, the more points.",
+        play:"Play", again:"Play again", cont:"▶ +1 life (watch ad)", contFree:"+1 life", over:"Resonance lost",
+        best:"Best", newBest:"New best!", paused:"Paused", resume:"Resume",
+        perfect:"Perfect!", good:"Good", miss:"Miss", combo:"Combo" }
+};
+let lang = (navigator.language || "ru").slice(0,2);
+lang = ["ru","uk","be","kk","uz"].includes(lang) ? "ru" : "en";
+const T = k => I18N[lang][k];
+function applyLang(){
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i]").forEach(el => el.textContent = T(el.dataset.i));
+  updateHud();
+}
+
+// ---------- хранилище (может быть недоступно) ----------
+function load(k, d){ try { const v = localStorage.getItem("rezonans_"+k); return v === null ? d : JSON.parse(v); } catch(e){ return d; } }
+function save(k, v){ try { localStorage.setItem("rezonans_"+k, JSON.stringify(v)); } catch(e){} }
+
+// ---------- площадки: ВК Игры, CrazyGames, Яндекс Игры ----------
+// Без площадки (локально, свой сайт) игра работает, реклама просто пропускается.
+let platform = "none", ysdk = null, adPlaying = false, lastInterstitial = 0;
+const params = new URLSearchParams(location.search);
+function loadScript(src, onload){
+  const s = document.createElement("script");
+  s.src = src; s.async = true; s.onload = onload; s.onerror = () => {};
+  document.head.appendChild(s);
+}
+function setLangFrom(code){ if (!code) return; lang = ["ru","uk","be","kk","uz"].includes(code) ? "ru" : "en"; applyLang(); }
+(function initPlatform(){
+  const host = location.hostname, ref = document.referrer || "";
+  if (params.has("vk_app_id") || params.get("platform") === "vk") {
+    loadScript("https://unpkg.com/@vkontakte/vk-bridge@2.15.0/dist/browser.min.js", () => {
+      if (!window.vkBridge || !vkBridge.isEmbedded()) return;  // вне клиента ВК рекламу не вызываем
+      platform = "vk";
+      vkBridge.send("VKWebAppInit").catch(() => {});
+      setLangFrom(params.get("vk_language"));
+    });
+  } else if (host.includes("crazygames") || ref.includes("crazygames") || params.get("platform") === "crazygames") {
+    loadScript("https://sdk.crazygames.com/crazygames-sdk-v3.js", () => {
+      if (!window.CrazyGames) return;
+      CrazyGames.SDK.init().then(() => { platform = "crazygames"; }).catch(() => {});
+    });
+  } else if (location.protocol !== "file:" && !["localhost", "127.0.0.1"].includes(host) && !host.endsWith("github.io")) {
+    loadScript("/sdk.js", () => {
+      if (!window.YaGames) return;
+      YaGames.init().then(sdk => {
+        ysdk = sdk; platform = "yandex";
+        setLangFrom(sdk.environment && sdk.environment.i18n && sdk.environment.i18n.lang);
+        if (sdk.features && sdk.features.LoadingAPI) sdk.features.LoadingAPI.ready();
+      }).catch(() => {});
+    });
+  }
+})();
+function gameplay(on){
+  try {
+    if (platform === "yandex") { const g = ysdk.features && ysdk.features.GameplayAPI; if (g) on ? g.start() : g.stop(); }
+    else if (platform === "crazygames") on ? CrazyGames.SDK.game.gameplayStart() : CrazyGames.SDK.game.gameplayStop();
+  } catch(e){}
+}
+function adOpen(){ adPlaying = true; if (ac) ac.suspend(); }
+function adClose(){ adPlaying = false; if (ac && !muted && !document.hidden) ac.resume(); }
+function showInterstitial(next){
+  if (platform === "none" || Date.now() - lastInterstitial < 60000) { next(); return; }
+  lastInterstitial = Date.now();
+  const done = () => { adClose(); next(); };
+  try {
+    if (platform === "yandex") {
+      ysdk.adv.showFullscreenAdv({ callbacks: { onOpen: adOpen, onClose: done, onError: done } });
+    } else if (platform === "crazygames") {
+      CrazyGames.SDK.ad.requestAd("midgame", { adStarted: adOpen, adFinished: done, adError: done });
+    } else if (platform === "vk") {
+      adOpen();
+      vkBridge.send("VKWebAppShowNativeAds", { ad_format: "interstitial" }).catch(() => {}).finally(done);
+    }
+  } catch(e){ done(); }
+}
+function showRewarded(onReward){
+  if (platform === "none") { onReward(); return; }
+  try {
+    if (platform === "yandex") {
+      let got = false;
+      ysdk.adv.showRewardedVideo({ callbacks: {
+        onOpen: adOpen, onRewarded: () => { got = true; },
+        onClose: () => { adClose(); if (got) onReward(); }, onError: adClose
+      }});
+    } else if (platform === "crazygames") {
+      CrazyGames.SDK.ad.requestAd("rewarded", { adStarted: adOpen, adFinished: () => { adClose(); onReward(); }, adError: adClose });
+    } else if (platform === "vk") {
+      adOpen();
+      vkBridge.send("VKWebAppShowNativeAds", { ad_format: "reward" })
+        .then(d => { adClose(); if (d && d.result) onReward(); })
+        .catch(adClose);
+    }
+  } catch(e){ adClose(); }
+}
+
+// ---------- звук ----------
+let ac = null, muted = load("muted", false);
+function unlockAudio(){
+  if (ac) return;
+  try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){ ac = null; }
+}
+function beep(freq, dur, type="sine", vol=0.12, slide=0){
+  if (muted || !ac || adPlaying || document.hidden) return;
+  const t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + dur);
+}
+const SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];  // пентатоника: серия звучит как мелодия
+const note = i => 440 * Math.pow(2, SCALE[i % SCALE.length] / 12) * (i >= SCALE.length ? 2 : 1);
+
+// ---------- холст ----------
+const cv = document.getElementById("c"), g = cv.getContext("2d");
+let W, H, DPR, CX, CY, BASE;
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  CX = W / 2; CY = H / 2 + Math.min(24, H * 0.03);
+  BASE = Math.min(W, H * 0.9);
+}
+window.addEventListener("resize", resize); resize();
+
+// ---------- состояние (радиусы — в долях BASE, чтобы не зависеть от размера экрана) ----------
+const S = { state:"menu", paused:false, score:0, hits:0, best:load("best", 0), lives:3, combo:0,
+            r:0, dir:1, target:0.3, tol:0.09, speed:0.3, lockT:0, time:0, hue:300,
+            ripples:[], parts:[], msg:"", msgT:0, shake:0, continued:false, deadT:0 };
+const $ = id => document.getElementById(id);
+const scoreEl = $("score"), bestEl = $("best"), livesEl = $("lives");
+function updateHud(){
+  scoreEl.textContent = S.score;
+  bestEl.textContent = T("best") + ": " + S.best;
+  livesEl.textContent = S.state === "menu" ? "" : "●".repeat(Math.max(0, S.lives)) + "○".repeat(Math.max(0, 3 - S.lives));
+}
+function show(id){
+  ["menu","over","pause"].forEach(s => $(s).classList.toggle("hidden", s !== id));
+  scoreEl.style.visibility = id === "menu" ? "hidden" : "visible";
+}
+
+function newRound(delay = 0.25){
+  // сложность растёт от числа попаданий; окно попадания не уже ~100 мс, чтобы игра оставалась честной
+  const h = Math.min(S.hits, 70);
+  S.speed = 0.26 + h * 0.0034;                        // доля BASE в секунду (до 0.5)
+  S.tol = Math.max(0.05, 0.1 - h * 0.0008);           // ширина кольца (до 0.05)
+  S.target = 0.16 + Math.random() * 0.26;
+  S.dir = S.hits >= 6 && Math.random() < 0.35 ? -1 : 1;   // иногда пульс сходится к центру
+  S.r = S.dir === 1 ? 0 : 0.47;
+  S.lockT = delay;
+}
+
+function startGame(){
+  Object.assign(S, { state:"play", score:0, hits:0, lives:3, combo:0, ripples:[], msg:"", msgT:0, continued:false, time:0, hue:300 });
+  newRound(0.6); updateHud(); show(null); gameplay(true);
+}
+
+function burst(r, color, n){
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * 6.283, v = BASE * (0.1 + Math.random() * 0.35);
+    S.parts.push({ x: CX + Math.cos(a) * r * BASE, y: CY + Math.sin(a) * r * BASE,
+                   vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.4 + Math.random() * 0.5, color });
+  }
+}
+function say(text){ S.msg = text; S.msgT = 0.8; }
+
+function tap(){
+  if (S.state !== "play" || S.paused || S.lockT > 0) return;
+  const d = Math.abs(S.r - S.target);
+  if (d > S.tol / 2) { miss(); return; }
+  const perfect = d <= S.tol / 6;
+  S.combo++; S.hits++;
+  let pts = perfect ? 3 : 1;
+  if (S.combo >= 10) pts *= 2;
+  S.score += pts;
+  S.hue = (S.hue + 25) % 360;
+  S.ripples.push({ r: S.target, life: 1, perfect });
+  burst(S.target, perfect ? "#ffe27a" : `hsl(${S.hue},90%,70%)`, perfect ? 30 : 14);
+  say((perfect ? T("perfect") : T("good")) + (S.combo >= 3 ? `  ${T("combo")} ×${S.combo}` : ""));
+  beep(note(Math.min(S.combo - 1, 20)), perfect ? 0.25 : 0.15, perfect ? "triangle" : "sine", 0.12);
+  updateHud();
+  newRound();
+}
+
+function miss(){
+  S.lives--; S.combo = 0; S.shake = 0.3;
+  say(T("miss")); beep(160, 0.3, "sawtooth", 0.12, -60);
+  updateHud();
+  if (S.lives <= 0) { die(); return; }
+  newRound(0.7);
+}
+
+function die(){
+  S.state = "dead"; S.deadT = 0.8; gameplay(false);
+  burst(S.target, "#ff6fb5", 40);
+  const nb = S.score > S.best;
+  if (nb) { S.best = S.score; save("best", S.best); }
+  $("final").textContent = S.score;
+  $("tag").textContent = nb && S.score > 0 ? T("newBest") : "";
+  $("contBtn").textContent = platform !== "none" ? T("cont") : T("contFree");
+  $("contBtn").classList.toggle("hidden", S.continued || S.score === 0);
+  updateHud();
+}
+
+function continueGame(){
+  Object.assign(S, { state:"play", lives:1, continued:true });
+  newRound(0.8); updateHud(); show(null); gameplay(true);
+}
+
+function update(dt){
+  S.time += dt;
+  S.shake = Math.max(0, S.shake - dt);
+  S.msgT = Math.max(0, S.msgT - dt);
+  for (const p of S.parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.95; p.vy *= 0.95; p.life -= dt; }
+  S.parts = S.parts.filter(p => p.life > 0);
+  for (const rp of S.ripples) { rp.r += dt * 0.25; rp.life -= dt * 1.6; }
+  S.ripples = S.ripples.filter(rp => rp.life > 0);
+
+  if (S.state === "menu") {  // демонстрация на фоне меню
+    S.r += 0.2 * dt; if (S.r > 0.47) { S.r = 0; S.target = 0.16 + Math.random() * 0.26; }
+    return;
+  }
+  if (S.state === "dead") { S.deadT -= dt; if (S.deadT <= 0 && $("over").classList.contains("hidden")) show("over"); return; }
+  if (S.state !== "play") return;
+
+  if (S.lockT > 0) { S.lockT -= dt; return; }
+  S.r += S.dir * S.speed * dt;
+  const passed = S.dir === 1 ? S.r > S.target + S.tol / 2 : S.r < S.target - S.tol / 2;
+  if (passed) miss();
+}
+
+function draw(){
+  g.save();
+  const bg = g.createRadialGradient(CX, CY, 0, CX, CY, Math.max(W, H) * 0.75);
+  bg.addColorStop(0, `hsl(${S.hue},45%,12%)`); bg.addColorStop(1, "#05020a");
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  if (S.shake > 0) { const k = S.shake * BASE * 0.05; g.translate((Math.random() - 0.5) * k, (Math.random() - 0.5) * k); }
+
+  // фоновые концентрические круги
+  g.strokeStyle = "#ffffff0d"; g.lineWidth = 1;
+  for (let i = 1; i <= 5; i++) { g.beginPath(); g.arc(CX, CY, BASE * 0.095 * i, 0, 6.29); g.stroke(); }
+
+  // целевое кольцо
+  const tr = S.target * BASE, tw = S.tol * BASE;
+  const appear = S.state === "play" && S.lockT > 0 ? 1 - Math.min(1, S.lockT / 0.25) * 0.5 : 1;
+  g.globalAlpha = appear;
+  g.strokeStyle = `hsla(${S.hue},90%,65%,0.22)`; g.lineWidth = tw;
+  g.beginPath(); g.arc(CX, CY, tr, 0, 6.29); g.stroke();
+  g.strokeStyle = `hsla(${S.hue},90%,75%,0.8)`; g.lineWidth = 2;
+  for (const off of [-tw / 2, tw / 2]) { g.beginPath(); g.arc(CX, CY, Math.max(1, tr + off), 0, 6.29); g.stroke(); }
+  g.strokeStyle = "#ffe27a"; g.lineWidth = 2;
+  g.beginPath(); g.arc(CX, CY, tr, 0, 6.29); g.stroke();
+  g.globalAlpha = 1;
+
+  // пульс
+  if (S.state !== "dead") {
+    const pr = Math.max(1, S.r * BASE);
+    g.strokeStyle = `hsla(${S.hue},100%,70%,0.5)`; g.lineWidth = 10;
+    g.beginPath(); g.arc(CX, CY, pr, 0, 6.29); g.stroke();
+    g.strokeStyle = "#ffffff"; g.lineWidth = 4;
+    g.beginPath(); g.arc(CX, CY, pr, 0, 6.29); g.stroke();
+  }
+
+  // ядро
+  const core = BASE * (0.035 + 0.004 * Math.sin(S.time * 6));
+  const cg = g.createRadialGradient(CX, CY, 0, CX, CY, core * 1.8);
+  cg.addColorStop(0, "#ffffff"); cg.addColorStop(0.4, `hsl(${S.hue},95%,70%)`); cg.addColorStop(1, `hsla(${S.hue},95%,60%,0)`);
+  g.fillStyle = cg; g.beginPath(); g.arc(CX, CY, core * 1.8, 0, 6.29); g.fill();
+
+  // волны после попадания
+  for (const rp of S.ripples) {
+    g.strokeStyle = rp.perfect ? `rgba(255,226,122,${rp.life})` : `hsla(${S.hue},90%,75%,${rp.life})`;
+    g.lineWidth = 3; g.beginPath(); g.arc(CX, CY, rp.r * BASE, 0, 6.29); g.stroke();
+  }
+  for (const p of S.parts) { g.globalAlpha = Math.max(0, p.life); g.fillStyle = p.color; g.fillRect(p.x - 2, p.y - 2, 4, 4); }
+  g.globalAlpha = 1;
+
+  // сообщение
+  if (S.msgT > 0 && S.state === "play") {
+    g.globalAlpha = Math.min(1, S.msgT * 2);
+    g.fillStyle = "#fff"; g.font = `700 ${Math.round(BASE * 0.06)}px system-ui,sans-serif`; g.textAlign = "center";
+    g.fillText(S.msg, CX, CY + BASE * 0.5 + (0.8 - S.msgT) * -20);
+    g.globalAlpha = 1;
+  }
+  g.restore();
+}
+
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (!S.paused && !adPlaying) update(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+
+// ---------- ввод ----------
+cv.addEventListener("pointerdown", e => { e.preventDefault(); unlockAudio(); tap(); });
+window.addEventListener("keydown", e => {
+  if (!["Space","Enter","ArrowUp"].includes(e.code)) return;
+  e.preventDefault(); unlockAudio();
+  if (S.state === "menu") startGame();
+  else if (S.paused) resume();
+  else tap();
+});
+window.addEventListener("contextmenu", e => e.preventDefault());
+
+$("playBtn").onclick = () => { unlockAudio(); startGame(); };
+$("againBtn").onclick = () => showInterstitial(startGame);
+$("contBtn").onclick = () => showRewarded(continueGame);
+$("resumeBtn").onclick = () => resume();
+function resume(){ S.paused = false; show(null); if (S.state === "play") gameplay(true); }
+const muteBtn = $("mute");
+function renderMute(){ muteBtn.textContent = muted ? "🔇" : "🔊"; }
+muteBtn.onclick = e => { e.stopPropagation(); unlockAudio(); muted = !muted; save("muted", muted); renderMute(); };
+muteBtn.addEventListener("pointerdown", e => e.stopPropagation());
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    if (ac) ac.suspend();
+    if (S.state === "play" && !S.paused) { S.paused = true; show("pause"); gameplay(false); }
+  } else if (ac && !adPlaying) ac.resume();
+});
+
+renderMute(); applyLang(); show("menu"); requestAnimationFrame(frame);
+</script>
+</body>
+</html>
