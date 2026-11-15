@@ -1,0 +1,16 @@
+{
+  "name": "strelki-novogodnyaya-sortirovka",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HTML5-головоломка для ВКонтакте: стрелки + сортировка в новогоднем оформлении",
+  "type": "module",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "levels": "node tools/build-levels.mjs 300",
+    "test": "node tools/test-levels.mjs 1 60 200",
+    "serve": "python -m http.server 8765"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.2"
+  }
+}

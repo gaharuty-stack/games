@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Витрина спрайтов</title>
+<style>body{margin:0;background:#1a3566}canvas{display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+import { buildArt, buildShelf, drawSprite, ART, COLOR_KEYS } from '../js/art.js';
+const c = document.getElementById('c');
+const W = 1400, H = 1500;
+c.width = W; c.height = H; c.style.width = W + 'px';
+const ctx = c.getContext('2d');
+await buildArt(1.4);
+await buildShelf(560, 1.4);
+const g = ctx.createLinearGradient(0, 0, 0, H);
+g.addColorStop(0, '#0d1d45'); g.addColorStop(1, '#2d5a9e');
+ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+// стрелки на ячейках
+COLOR_KEYS.forEach((col, i) => {
+  for (let d = 0; d < 4; d++) {
+    const x = 60 + d * 90 + (i % 2) * 380, y = 60 + Math.floor(i / 2) * 90;
+    drawSprite(ctx, 'socket', x, y, 86);
+    drawSprite(ctx, 'ashadow_' + d, x, y + 5, 86 * 1.1);
+    drawSprite(ctx, `arrow_${col}_${d}`, x, y, 86 * 1.1);
+  }
+});
+// коробки
+COLOR_KEYS.forEach((col, i) => {
+  const x = 820 + (i % 4) * 150, y = 90 + Math.floor(i / 4) * 170;
+  drawSprite(ctx, 'boxback_' + col, x, y, 140);
+  drawSprite(ctx, `arrow_${col}_0`, x - 22, y - 30, 60);
+  drawSprite(ctx, `arrow_${col}_0`, x + 4, y - 34, 60);
+  drawSprite(ctx, 'boxfront_' + col, x, y, 140);
+});
+// закрытая коробка
+['red', 'gold'].forEach((col, i) => {
+  const x = 860 + i * 200, y = 470;
+  drawSprite(ctx, 'boxback_' + col, x, y, 140);
+  drawSprite(ctx, 'boxfront_' + col, x, y, 140);
+  drawSprite(ctx, 'lid_' + col, x, y - 38, 140);
+  drawSprite(ctx, col === 'gold' ? 'bow_red' : 'bow_gold', x, y - 58, 84);
+});
+// полка
+drawSprite(ctx, 'shelf', 330, 470, 560);
+for (let i = 0; i < 6; i++) {
+  const x = 330 - 225 + i * 90;
+  drawSprite(ctx, 'nest', x, 455, 74);
+  if (i < 4) drawSprite(ctx, `arrow_${COLOR_KEYS[i]}_0`, x, 430, 70);
+  if (i === 5) drawSprite(ctx, 'lock', x, 440, 44);
+}
+// мелочи
+const small = ['heart', 'heart_empty', 'coin', 'sparkle', 'flake0', 'flake1', 'flake2', 'snowdot', 'lock', 'video', 'wand', 'magnet', 'snowball', 'gift', 'candy', 'bell', 'holly', 'hand'];
+small.forEach((n, i) => drawSprite(ctx, n, 60 + (i % 9) * 100, 600 + Math.floor(i / 9) * 110, 70));
+const icons = ['gear', 'sound', 'mute', 'music', 'home', 'restart', 'close', 'play', 'trophy', 'plus', 'star', 'invite'];
+icons.forEach((n, i) => {
+  const x = 60 + i * 90, y = 830;
+  ctx.fillStyle = '#2d7be0'; ctx.beginPath(); ctx.arc(x, y, 36, 0, 7); ctx.fill();
+  drawSprite(ctx, 'i_' + n, x, y, 50);
+});
+drawSprite(ctx, 'tree', 250, 1180, 420);
+['red', 'blue', 'gold', 'purple', 'pink', 'cyan'].forEach((c2, i) => drawSprite(ctx, 'orn_' + c2, 520 + i * 60, 940, 46));
+drawSprite(ctx, 'startop', 560, 1040, 100);
+drawSprite(ctx, 'snowman', 780, 1180, 230);
+document.title = 'ready';
+</script></body></html>

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Промо</title>
+<link rel="stylesheet" href="../style.css">
+<style>html,body{margin:0;overflow:hidden;background:#0b1a4a}canvas{display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+// Промо-картинки для страницы игры: ?mode=icon | banner
+import { buildArt, drawSprite, PAL } from '../js/art.js';
+import { Background } from '../js/bg.js';
+import { text, drawRibbon } from '../js/ui.js';
+const mode = new URLSearchParams(location.search).get('mode') || 'icon';
+const W = innerWidth, H = innerHeight;
+const c = document.getElementById('c');
+c.width = W; c.height = H;
+const ctx = c.getContext('2d');
+await Promise.all([document.fonts.load('900 40px Nunito'), document.fonts.load('800 40px Nunito')]);
+await buildArt(mode === 'icon' ? W / 110 : Math.max(W, H) / 260);
+const bg = new Background();
+bg.build(W, H, 1);
+bg.draw(ctx, 1, 0, 1.2);
+bg.flakes.forEach((f) => { f.y = Math.random() * H; });
+bg.drawSnow(ctx, 1, 0, 0);
+ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+function title(x, y, size) {
+  const word = 'СТРЕЛКИ';
+  const cols = ['red', 'gold', 'green', 'blue', 'pink', 'orange', 'purple'];
+  ctx.font = `900 ${size}px Nunito`;
+  const ws = [...word].map((ch) => ctx.measureText(ch).width);
+  let cx = x - (ws.reduce((a, b) => a + b, 0) + 2 * 6) / 2;
+  [...word].forEach((ch, i) => {
+    const P = PAL[cols[i]];
+    const yy = y + Math.sin(i * 0.9) * size * 0.05;
+    text(ctx, ch, cx + ws[i] / 2, yy, size, { stroke: '#ffffff', sw: size * 0.24, shadow: false });
+    text(ctx, ch, cx + ws[i] / 2, yy, size, { stroke: P.dark, sw: size * 0.11, gradient: [P.light, P.base, P.mid] });
+    if (i % 2 === 0) {
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.ellipse(cx + ws[i] / 2 - ws[i] * 0.05, yy - size * 0.36, ws[i] * 0.3, size * 0.07, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    cx += ws[i] + 2;
+  });
+}
+
+function giftWithArrows(x, y, w, color, arrows) {
+  drawSprite(ctx, 'boxback_' + color, x, y, w);
+  arrows.forEach((col, i) => drawSprite(ctx, `arrow_${col}_0`, x + (i - 1) * w * 0.22, y - w * 0.17, w * 0.44));
+  drawSprite(ctx, 'boxfront_' + color, x, y, w);
+}
+
+if (mode === 'icon') {
+  const g = ctx.createRadialGradient(W / 2, H * 0.45, 10, W / 2, H / 2, W * 0.75);
+  g.addColorStop(0, 'rgba(255,220,120,.35)');
+  g.addColorStop(1, 'rgba(255,220,120,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+  drawSprite(ctx, 'sparkle', W * 0.2, H * 0.22, W * 0.16);
+  drawSprite(ctx, 'sparkle', W * 0.83, H * 0.3, W * 0.12);
+  drawSprite(ctx, 'arrow_red_1', W * 0.24, H * 0.6, W * 0.34, { rot: -0.5 });
+  drawSprite(ctx, 'arrow_blue_3', W * 0.8, H * 0.58, W * 0.32, { rot: 0.5 });
+  giftWithArrows(W * 0.52, H * 0.6, W * 0.78, 'red', ['green', 'gold', 'cyan']);
+  drawSprite(ctx, 'holly', W * 0.72, H * 0.43, W * 0.24, { rot: 0.3 });
+} else {
+  // баннер
+  drawSprite(ctx, 'tree', W * 0.17, H * 0.56, H * 0.68);
+  ['red', 'gold', 'blue', 'pink', 'purple', 'cyan'].forEach((col, i) => {
+    drawSprite(ctx, 'orn_' + col, W * 0.17 + (i - 2.5) * H * 0.075, H * (0.48 + (i % 2) * 0.12), H * 0.07);
+  });
+  drawSprite(ctx, 'startop', W * 0.17, H * 0.2, H * 0.17);
+  title(W * 0.58, H * 0.26, H * 0.2);
+  drawRibbon(ctx, W * 0.58, H * 0.43, H * 0.78, H * 0.12, 'red');
+  text(ctx, 'новогодняя сортировка', W * 0.58, H * 0.425, H * 0.062, { stroke: '#4a0710' });
+  giftWithArrows(W * 0.47, H * 0.75, H * 0.36, 'green', ['red', 'gold', 'blue']);
+  giftWithArrows(W * 0.69, H * 0.75, H * 0.36, 'purple', ['pink', 'cyan', 'orange']);
+  drawSprite(ctx, 'arrow_gold_3', W * 0.335, H * 0.86, H * 0.18, { rot: 0.35 });
+  drawSprite(ctx, 'snowman', W * 0.9, H * 0.72, H * 0.36);
+  drawSprite(ctx, 'sparkle', W * 0.36, H * 0.12, H * 0.1);
+  drawSprite(ctx, 'sparkle', W * 0.82, H * 0.14, H * 0.08);
+}
+window.__ready = true;
+</script></body></html>
