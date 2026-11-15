@@ -12,8 +12,10 @@
   canvas{display:block;width:100vw;height:100vh}
   button{font:inherit;color:inherit;cursor:pointer}
   .vk-only{display:none!important} body.vk .vk-only{display:inherit!important}
+  body.ok .no-ok{display:none!important}  /* в Одноклассниках нет рейтинга и окна записи на стену */
+  #hudBtns{display:flex;gap:8px}
   #hud{position:fixed;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;
-    padding:14px 18px;pointer-events:none;font-weight:700}
+    padding:14px 18px;pointer-events:none;font-weight:700;z-index:5}  /* кнопка звука доступна и в меню, и на паузе */
   #score{font-size:44px;line-height:1;text-shadow:0 0 18px #66ccff88}
   #sub{font-size:15px;margin-top:6px;display:flex;gap:10px;align-items:center}
   #combo{color:#ffd66b}
@@ -87,7 +89,10 @@
     <div id="sub"><span id="gemsHud">💎 0</span><span id="combo"></span></div>
     <div id="pw"></div>
   </div>
-  <button class="iconbtn" id="mute" aria-label="sound">🔊</button>
+  <div id="hudBtns">
+    <button class="iconbtn" id="pauseBtn" aria-label="pause">⏸</button>
+    <button class="iconbtn" id="mute" aria-label="sound">🔊</button>
+  </div>
 </div>
 
 <div id="menu" class="screen">
@@ -99,7 +104,7 @@
     <button class="tile" id="shopBtn"><span>🚀</span><b data-i="shop"></b><i class="badge" id="shopBadge"></i></button>
     <button class="tile" id="missBtn"><span>🎯</span><b data-i="missions"></b><i class="badge" id="missBadge"></i></button>
     <button class="tile" id="dailyBtn"><span>🎁</span><b data-i="daily"></b><i class="badge" id="dailyBadge"></i></button>
-    <button class="tile vk-only" id="rankBtn"><span>🏆</span><b data-i="rank"></b></button>
+    <button class="tile vk-only no-ok" id="rankBtn"><span>🏆</span><b data-i="rank"></b></button>
   </div>
   <button class="link vk-only" id="inviteBtn" data-i="invite"></button>
 </div>
@@ -140,12 +145,13 @@
     <button class="big alt" id="againBtn" data-i="again"></button>
     <button class="big alt" id="menuBtn" data-i="menu"></button>
   </div>
-  <button class="link vk-only" id="shareBtn" data-i="share"></button>
+  <button class="link vk-only no-ok" id="shareBtn" data-i="share"></button>
 </div>
 
 <div id="pause" class="screen hidden">
   <h2 data-i="paused"></h2>
   <button class="big" id="resumeBtn" data-i="resume"></button>
+  <button class="big alt" id="quitBtn" data-i="menu"></button>
 </div>
 
 <div id="toast"></div>
@@ -159,7 +165,7 @@ function ruPlural(n, one, few, many){ const a = n % 10, b = n % 100; return a ==
 const I18N = {
   ru: {
     title:"ОРБИТА", hint:"Нажимайте на экран или пробел, чтобы перепрыгнуть на другую орбиту. Собирайте кристаллы, уворачивайтесь от астероидов и комет.",
-    play:"Играть", again:"Ещё раз", menu:"В меню", share:"Поделиться рекордом", over:"Крушение!", best:"Рекорд",
+    play:"Играть", again:"Ещё раз", menu:"В меню", share:"Поделиться рекордом", inviteText:"Залетай в «Орбиту» — попробуй побить мой рекорд!", over:"Крушение!", best:"Рекорд",
     newBest:"Новый рекорд!", paused:"Пауза", resume:"Продолжить", shop:"Корабли", missions:"Задания", daily:"Награды",
     rank:"Рейтинг", invite:"Пригласить друзей", select:"Выбрать", selected:"✓ Выбран", day7:"7-й день наград",
     claim:"Забрать", dailyTitle:"Ежедневная награда", dailyHint:"Заходите каждый день подряд — на 7-й день редкий корабль «Пустота»!",
@@ -176,7 +182,7 @@ const I18N = {
   },
   en: {
     title:"ORBIT", hint:"Tap or press Space to jump to the other orbit. Collect crystals, dodge asteroids and comets.",
-    play:"Play", again:"Play again", menu:"Menu", share:"Share my record", over:"Crashed!", best:"Best",
+    play:"Play", again:"Play again", menu:"Menu", share:"Share my record", inviteText:"Join me in Orbita — try to beat my record!", over:"Crashed!", best:"Best",
     newBest:"New best!", paused:"Paused", resume:"Resume", shop:"Ships", missions:"Missions", daily:"Rewards",
     rank:"Ranking", invite:"Invite friends", select:"Select", selected:"✓ Selected", day7:"Day 7 reward",
     claim:"Claim", dailyTitle:"Daily reward", dailyHint:"Come back every day — on day 7 you get the rare ship “Void”!",
@@ -270,6 +276,8 @@ function persist(){
 // =====================================================================
 let platform = "none", ysdk = null, adPlaying = false, lastInterstitial = 0;
 const params = new URLSearchParams(location.search);
+// та же игра в Одноклассниках (через VK Bridge): там нет рейтинга и окна записи на стену
+const isOK = params.get("vk_client") === "ok" || /_ok$/.test(params.get("vk_platform") || "");
 function loadScript(src, onload){ const s = document.createElement("script"); s.src = src; s.async = true; s.onload = onload; s.onerror = () => {}; document.head.appendChild(s); }
 function setLangFrom(code){ if (!code) return; lang = ["ru","uk","be","kk","uz"].includes(code) ? "ru" : "en"; applyLang(); }
 (function initPlatform(){
@@ -278,7 +286,14 @@ function setLangFrom(code){ if (!code) return; lang = ["ru","uk","be","kk","uz"]
     loadScript("https://unpkg.com/@vkontakte/vk-bridge@2.15.0/dist/browser.min.js", () => {
       if (!window.vkBridge || !vkBridge.isEmbedded()) return;
       platform = "vk"; document.body.classList.add("vk");
+      if (isOK) document.body.classList.add("ok");
       vkBridge.send("VKWebAppInit").catch(() => {});
+      // сворачивание мобильного клиента ВК: звук и игра на паузу (правила ВК, п. 2.2.5)
+      vkBridge.subscribe(e => {
+        const t = e && e.detail && e.detail.type;
+        if (t === "VKWebAppViewHide") onHide();
+        else if (t === "VKWebAppViewRestore") onShow();
+      });
       setLangFrom(params.get("vk_language"));
       vkBridge.send("VKWebAppStorageGet", { keys:["save"] }).then(d => {
         const v = d && d.keys && d.keys[0] && d.keys[0].value;
@@ -884,6 +899,7 @@ function show(id){
   $("score").style.visibility = inGame ? "visible" : "hidden";
   $("sub").style.visibility = inGame ? "visible" : "hidden";
   $("pw").style.visibility = id === null ? "visible" : "hidden";
+  $("pauseBtn").style.visibility = id === null ? "visible" : "hidden";
 }
 function applyLang(){
   document.documentElement.lang = lang;
@@ -983,6 +999,7 @@ function press(){
 }
 cv.addEventListener("pointerdown", e => { e.preventDefault(); press(); });
 window.addEventListener("keydown", e => {
+  if (e.code === "Escape" || e.code === "KeyP") { if (S.paused) resume(); else pauseGame(); return; }
   if (!["Space","ArrowUp","ArrowDown","Enter"].includes(e.code)) return;
   e.preventDefault(); unlockAudio();
   if (S.state === "menu" && !$("menu").classList.contains("hidden")) startGame();
@@ -1011,10 +1028,27 @@ $("shareBtn").onclick = () => {
   const appId = params.get("vk_app_id");
   vkBridge.send("VKWebAppShowWallPostBox", { message: T("shareText")(Math.max(S.score, SAVE.best)), attachments: appId ? `https://vk.com/app${appId}` : "" }).catch(() => {});
 };
-$("rankBtn").onclick = () => { if (platform === "vk") vkBridge.send("VKWebAppShowLeaderBoardBox", { user_result: SAVE.best }).catch(() => {}); };
-$("inviteBtn").onclick = () => { if (platform === "vk") vkBridge.send("VKWebAppShowInviteBox").catch(() => {}); };
+$("rankBtn").onclick = () => { if (platform === "vk" && !isOK) vkBridge.send("VKWebAppShowLeaderBoardBox", { user_result: SAVE.best }).catch(() => {}); };
+// в Одноклассниках окно приглашения требует текст сообщения
+$("inviteBtn").onclick = () => { if (platform === "vk") vkBridge.send("VKWebAppShowInviteBox", isOK ? { message: T("inviteText") } : {}).catch(() => {}); };
 $("resumeBtn").onclick = () => resume();
 function resume(){ S.paused = false; show(null); if (S.state === "play") gameplay(true); }
+function pauseGame(){
+  if (S.state !== "play" || S.paused) return;
+  S.paused = true; show("pause"); gameplay(false);
+}
+// выход в меню посреди забега: забег засчитывается, собранные кристаллы остаются (без рекламы)
+function quitRun(){
+  if (S.state !== "play") { S.paused = false; refreshMenu(); show("menu"); return; }
+  if (S.score > SAVE.best) SAVE.best = S.score;
+  SAVE.crystals += S.gems;
+  S.state = "dead"; endRun();
+  S.paused = false; S.state = "menu"; S.objs = [];
+  gameplay(false); refreshMenu(); show("menu");
+}
+$("pauseBtn").onclick = e => { e.stopPropagation(); pauseGame(); };
+$("pauseBtn").addEventListener("pointerdown", e => e.stopPropagation());
+$("quitBtn").onclick = () => quitRun();
 const muteBtn = $("mute");
 muteBtn.onclick = e => {
   e.stopPropagation(); unlockAudio();
@@ -1024,12 +1058,12 @@ muteBtn.onclick = e => {
 };
 muteBtn.addEventListener("pointerdown", e => e.stopPropagation());
 
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) {
-    if (ac) ac.suspend();
-    if (S.state === "play" && !S.paused) { S.paused = true; show("pause"); gameplay(false); }
-  } else if (ac && !adPlaying) ac.resume();
-});
+function onHide(){
+  if (ac) ac.suspend();
+  pauseGame();
+}
+function onShow(){ if (ac && !adPlaying && !document.hidden) ac.resume(); }
+document.addEventListener("visibilitychange", () => { if (document.hidden) onHide(); else onShow(); });
 
 // ---------- старт ----------
 ensureMissions(); persist();
