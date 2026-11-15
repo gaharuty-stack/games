@@ -58,7 +58,7 @@ export class MenuScene {
     this.play.onClick = () => app.startLevel(SAVE.data.level);
     this.btnGift = new Button({ round: true, w: 100, style: 'red', icon: 'gift', iconW: 70 });
     this.btnGift.onClick = () => this.openDaily();
-    this.btnTop = new Button({ round: true, w: 100, style: 'gold', icon: 'i_trophy', iconW: 58, visible: VK.inVK });
+    this.btnTop = new Button({ round: true, w: 100, style: 'gold', icon: 'i_trophy', iconW: 58, visible: VK.hasLeaderboard });
     this.btnTop.onClick = () => VK.leaderboard(SAVE.data.level - 1);
     this.btnInvite = new Button({ round: true, w: 100, style: 'purple', icon: 'i_invite', iconW: 58, visible: VK.inVK });
     this.btnInvite.onClick = () => VK.invite();

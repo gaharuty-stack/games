@@ -8,6 +8,10 @@ const withTimeout = (p, ms, fb) => Promise.race([p, new Promise((r) => setTimeou
 export const VK = {
   inVK: !!(params.get('vk_app_id') || params.get('api_id') || params.get('vk_platform')),
   platform: params.get('vk_platform') || 'web',
+  // та же игра в Одноклассниках (через VK Bridge): там нет окна рейтинга, а приглашению нужен текст
+  isOK: params.get('vk_client') === 'ok' || /_ok$/.test(params.get('vk_platform') || ''),
+  inviteText: 'Помоги собрать подарки к Новому году — сыграй со мной в «Новогодние Стрелки»!',
+  get hasLeaderboard() { return this.inVK && !this.isOK; },
   ready: false,
   onPause: null,
   onResume: null,
@@ -90,11 +94,11 @@ export const VK = {
 
   async invite() {
     if (!this.inVK || !bridge) return false;
-    try { await bridge.send('VKWebAppShowInviteBox'); return true; } catch (e) { return false; }
+    try { await bridge.send('VKWebAppShowInviteBox', this.isOK ? { message: this.inviteText } : {}); return true; } catch (e) { return false; }
   },
 
   async leaderboard(level) {
-    if (!this.inVK || !bridge) return false;
+    if (!this.hasLeaderboard || !bridge) return false;
     try { await bridge.send('VKWebAppShowLeaderBoardBox', { user_result: level }); return true; } catch (e) { return false; }
   },
 };
