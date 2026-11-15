@@ -1,8 +1,1075 @@
-<!doctype html><html lang="ru"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Игры</title>
-<style>body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
-gap:16px;background:#05060f;color:#eaf0ff;font-family:system-ui,sans-serif}
-a{color:#05060f;background:linear-gradient(90deg,#77ccff,#cc88ff);padding:14px 40px;border-radius:14px;
-font-size:22px;font-weight:700;text-decoration:none;text-transform:capitalize}</style></head>
-<body><h1>Игры</h1><a href="orbita/">orbita</a>
-<a href="rezonans/">rezonans</a></body></html>
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Орбита</title>
+<style>
+  :root{--accent1:#77ccff;--accent2:#cc88ff;--panel:#0d1430f0;--line:#ffffff22}
+  html,body{margin:0;height:100%;background:#05060f;overflow:hidden;touch-action:none;
+    user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#eaf0ff}
+  canvas{display:block;width:100vw;height:100vh}
+  button{font:inherit;color:inherit;cursor:pointer}
+  .vk-only{display:none!important} body.vk .vk-only{display:inherit!important}
+  body.ok .no-ok{display:none!important}  /* в Одноклассниках нет рейтинга и окна записи на стену */
+  #hudBtns{display:flex;gap:8px}
+  #hud{position:fixed;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;
+    padding:14px 18px;pointer-events:none;font-weight:700;z-index:5}  /* кнопка звука доступна и в меню, и на паузе */
+  #score{font-size:44px;line-height:1;text-shadow:0 0 18px #66ccff88}
+  #sub{font-size:15px;margin-top:6px;display:flex;gap:10px;align-items:center}
+  #combo{color:#ffd66b}
+  #pw{display:flex;gap:6px;margin-top:8px}
+  #pw span{background:#ffffff18;border:1px solid #ffffff30;border-radius:10px;padding:3px 7px;font-size:13px}
+  .iconbtn{pointer-events:auto;background:#ffffff14;border:1px solid #ffffff30;border-radius:12px;width:44px;height:44px;font-size:20px}
+  .screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:14px;background:radial-gradient(circle at center,#0a1030bb,#02030add);text-align:center;padding:20px;box-sizing:border-box}
+  .hidden{display:none!important}
+  h1{font-size:clamp(44px,12vw,80px);margin:0;letter-spacing:.08em;line-height:1;
+    background:linear-gradient(90deg,var(--accent1),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  h2{margin:0;font-size:28px}
+  p{margin:0;opacity:.8;max-width:420px;line-height:1.45}
+  .topbar{position:absolute;top:14px;left:16px;right:16px;display:flex;gap:8px;justify-content:flex-start}
+  .pill{background:#ffffff14;border:1px solid #ffffff2a;border-radius:999px;padding:7px 14px;font-weight:700;font-size:15px}
+  button.big{font-size:22px;font-weight:800;padding:15px 34px;border-radius:18px;border:0;
+    color:#05060f;background:linear-gradient(90deg,var(--accent1),var(--accent2));box-shadow:0 0 26px #77ccff55;min-width:240px}
+  button.big:active{transform:scale(.97)}
+  button.alt{background:#ffffff16;color:#fff;box-shadow:none;border:1px solid #ffffff3a;font-size:18px;min-width:0}
+  button.gold{background:linear-gradient(90deg,#ffd66b,#ff9f43);box-shadow:0 0 22px #ffb34766}
+  button[disabled]{opacity:.45;pointer-events:none}
+  .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  .tile{position:relative;width:86px;height:80px;border-radius:18px;border:1px solid #ffffff2a;background:#ffffff10;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:13px}
+  .tile span{font-size:26px}
+  .badge{position:absolute;top:-6px;right:-6px;min-width:20px;height:20px;border-radius:10px;background:#ff4f6d;color:#fff;
+    font-style:normal;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 5px;box-sizing:border-box}
+  .badge:empty{display:none}
+  .link{background:none;border:0;color:#9fd6ff;text-decoration:underline;font-size:15px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:22px;width:min(520px,100%);max-height:88vh;
+    display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px #0008}
+  .ph{display:flex;align-items:center;gap:10px;padding:16px 18px;border-bottom:1px solid var(--line)}
+  .ph h2{flex:1;text-align:left;font-size:22px}
+  .x{background:#ffffff14;border:0;border-radius:10px;width:36px;height:36px;font-size:18px}
+  .pbody{padding:14px;overflow:auto}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+  .card{background:#ffffff0c;border:1px solid var(--line);border-radius:16px;padding:10px;display:flex;flex-direction:column;align-items:center;gap:6px}
+  .card.sel{border-color:#77ccff;box-shadow:0 0 0 1px #77ccff inset}
+  .card canvas{width:84px;height:84px}
+  .card b{font-size:15px}
+  .card button{width:100%;border:0;border-radius:10px;padding:9px 6px;font-weight:700;font-size:14px;background:#ffffff1c}
+  .card button.buy{background:linear-gradient(90deg,var(--accent1),var(--accent2));color:#05060f}
+  .card button.ad{background:linear-gradient(90deg,#ffd66b,#ff9f43);color:#1a1000}
+  .mission{display:flex;gap:12px;align-items:center;background:#ffffff0c;border:1px solid var(--line);border-radius:16px;padding:12px;margin-bottom:10px;text-align:left}
+  .mission .t{flex:1}
+  .mission .t div{font-weight:700;margin-bottom:6px}
+  .bar{height:8px;border-radius:4px;background:#ffffff18;overflow:hidden}
+  .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent1),var(--accent2))}
+  .mission small{opacity:.75}
+  .mission button{border:0;border-radius:10px;padding:9px 12px;font-weight:800;background:linear-gradient(90deg,#ffd66b,#ff9f43);color:#1a1000}
+  .days{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .day{background:#ffffff0c;border:1px solid var(--line);border-radius:14px;padding:10px 4px;font-size:13px}
+  .day b{display:block;font-size:17px;margin-top:4px}
+  .day.done{opacity:.45}
+  .day.cur{border-color:#ffd66b;box-shadow:0 0 18px #ffd66b44}
+  .day.big{grid-column:span 2}
+  .final{font-size:76px;font-weight:800;line-height:1}
+  .tag{color:#ffd66b;font-weight:700;min-height:1.3em}
+  .earned{font-size:18px;font-weight:700}
+  #toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);opacity:0;transition:.3s;pointer-events:none;
+    background:#141c40f0;border:1px solid #ffd66b88;border-radius:14px;padding:10px 16px;font-weight:700;max-width:90vw;text-align:center;z-index:10}
+  #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <div>
+    <div id="score">0</div>
+    <div id="sub"><span id="gemsHud">💎 0</span><span id="combo"></span></div>
+    <div id="pw"></div>
+  </div>
+  <div id="hudBtns">
+    <button class="iconbtn" id="pauseBtn" aria-label="pause">⏸</button>
+    <button class="iconbtn" id="mute" aria-label="sound">🔊</button>
+  </div>
+</div>
+
+<div id="menu" class="screen">
+  <div class="topbar"><div class="pill">💎 <span id="mCrystals">0</span></div><div class="pill">🏆 <span id="mBest">0</span></div></div>
+  <h1 data-i="title"></h1>
+  <p data-i="hint"></p>
+  <button class="big" id="playBtn" data-i="play"></button>
+  <div class="row">
+    <button class="tile" id="shopBtn"><span>🚀</span><b data-i="shop"></b><i class="badge" id="shopBadge"></i></button>
+    <button class="tile" id="missBtn"><span>🎯</span><b data-i="missions"></b><i class="badge" id="missBadge"></i></button>
+    <button class="tile" id="dailyBtn"><span>🎁</span><b data-i="daily"></b><i class="badge" id="dailyBadge"></i></button>
+    <button class="tile vk-only no-ok" id="rankBtn"><span>🏆</span><b data-i="rank"></b></button>
+  </div>
+  <button class="link vk-only" id="inviteBtn" data-i="invite"></button>
+</div>
+
+<div id="shop" class="screen hidden">
+  <div class="panel">
+    <div class="ph"><h2 data-i="shop"></h2><div class="pill">💎 <span class="crys">0</span></div><button class="x" data-back>✕</button></div>
+    <div class="pbody"><div class="grid" id="shopGrid"></div></div>
+  </div>
+</div>
+
+<div id="missions" class="screen hidden">
+  <div class="panel">
+    <div class="ph"><h2 data-i="missions"></h2><div class="pill">💎 <span class="crys">0</span></div><button class="x" data-back>✕</button></div>
+    <div class="pbody" id="missList"></div>
+  </div>
+</div>
+
+<div id="daily" class="screen hidden">
+  <div class="panel">
+    <div class="ph"><h2 data-i="dailyTitle"></h2><button class="x" data-back>✕</button></div>
+    <div class="pbody">
+      <p style="margin:0 auto 12px" data-i="dailyHint"></p>
+      <div class="days" id="days"></div>
+      <div style="margin-top:14px"><button class="big gold" id="claimDaily"></button></div>
+    </div>
+  </div>
+</div>
+
+<div id="over" class="screen hidden">
+  <h2 data-i="over"></h2>
+  <div class="final" id="final">0</div>
+  <div class="tag" id="tag"></div>
+  <div class="earned" id="earned"></div>
+  <button class="big" id="contBtn"></button>
+  <button class="big gold" id="dblBtn"></button>
+  <div class="row">
+    <button class="big alt" id="againBtn" data-i="again"></button>
+    <button class="big alt" id="menuBtn" data-i="menu"></button>
+  </div>
+  <button class="link vk-only no-ok" id="shareBtn" data-i="share"></button>
+</div>
+
+<div id="pause" class="screen hidden">
+  <h2 data-i="paused"></h2>
+  <button class="big" id="resumeBtn" data-i="resume"></button>
+  <button class="big alt" id="quitBtn" data-i="menu"></button>
+</div>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+// =====================================================================
+//  ТЕКСТЫ
+// =====================================================================
+function ruPlural(n, one, few, many){ const a = n % 10, b = n % 100; return a === 1 && b !== 11 ? one : a >= 2 && a <= 4 && (b < 12 || b > 14) ? few : many; }
+const I18N = {
+  ru: {
+    title:"ОРБИТА", hint:"Нажимайте на экран или пробел, чтобы перепрыгнуть на другую орбиту. Собирайте кристаллы, уворачивайтесь от астероидов и комет.",
+    play:"Играть", again:"Ещё раз", menu:"В меню", share:"Поделиться рекордом", inviteText:"Залетай в «Орбиту» — попробуй побить мой рекорд!", over:"Крушение!", best:"Рекорд",
+    newBest:"Новый рекорд!", paused:"Пауза", resume:"Продолжить", shop:"Корабли", missions:"Задания", daily:"Награды",
+    rank:"Рейтинг", invite:"Пригласить друзей", select:"Выбрать", selected:"✓ Выбран", day7:"7-й день наград",
+    claim:"Забрать", dailyTitle:"Ежедневная награда", dailyHint:"Заходите каждый день подряд — на 7-й день редкий корабль «Пустота»!",
+    dayN:"День", missionDone:"Задание выполнено!", near:"Близко!", system:"Система", noAd:"Реклама сейчас недоступна, попробуйте позже",
+    tap:"Нажмите, чтобы сменить орбиту", notEnough:"Не хватает кристаллов", unlocked:"Новый корабль!",
+    cont:"▶ Продолжить за рекламу", contFree:"Продолжить", dbl:n => `▶ ×2 кристаллы (+${n} 💎)`, dblFree:n => `×2 кристаллы (+${n} 💎)`,
+    earned:n => `+${n} 💎 за забег`, claimDay:n => `Забрать +${n} 💎`, claimedToday:"Приходите завтра!", adBtn:(a,b) => `▶ Реклама ${a}/${b}`,
+    shareText:n => `Я набрал ${n} очков в игре «Орбита»! Сможешь больше?`,
+    shield:"Щит", magnet:"Магнит", slow:"Замедление",
+    m_gems_run:n => `Собери ${n} 💎 за один забег`, m_survive:n => `Продержись ${n} ${ruPlural(n,"секунду","секунды","секунд")}`,
+    m_near:n => `Сделай ${n} ${ruPlural(n,"опасный пролёт","опасных пролёта","опасных пролётов")}`,
+    m_runs:n => `Сыграй ${n} ${ruPlural(n,"забег","забега","забегов")}`, m_pw:n => `Подбери ${n} ${ruPlural(n,"бонус","бонуса","бонусов")}`,
+    m_total:n => `Собери ${n} 💎 всего`, m_score:n => `Набери ${n} очков за забег`
+  },
+  en: {
+    title:"ORBIT", hint:"Tap or press Space to jump to the other orbit. Collect crystals, dodge asteroids and comets.",
+    play:"Play", again:"Play again", menu:"Menu", share:"Share my record", inviteText:"Join me in Orbita — try to beat my record!", over:"Crashed!", best:"Best",
+    newBest:"New best!", paused:"Paused", resume:"Resume", shop:"Ships", missions:"Missions", daily:"Rewards",
+    rank:"Ranking", invite:"Invite friends", select:"Select", selected:"✓ Selected", day7:"Day 7 reward",
+    claim:"Claim", dailyTitle:"Daily reward", dailyHint:"Come back every day — on day 7 you get the rare ship “Void”!",
+    dayN:"Day", missionDone:"Mission complete!", near:"Close call!", system:"System", noAd:"Ad is not available now, try later",
+    tap:"Tap to switch orbit", notEnough:"Not enough crystals", unlocked:"New ship!",
+    cont:"▶ Continue (watch ad)", contFree:"Continue", dbl:n => `▶ ×2 crystals (+${n} 💎)`, dblFree:n => `×2 crystals (+${n} 💎)`,
+    earned:n => `+${n} 💎 this run`, claimDay:n => `Claim +${n} 💎`, claimedToday:"Come back tomorrow!", adBtn:(a,b) => `▶ Ad ${a}/${b}`,
+    shareText:n => `I scored ${n} in Orbit! Can you beat me?`,
+    shield:"Shield", magnet:"Magnet", slow:"Slow-mo",
+    m_gems_run:n => `Collect ${n} 💎 in one run`, m_survive:n => `Survive ${n} seconds`, m_near:n => `Make ${n} close calls`,
+    m_runs:n => `Play ${n} runs`, m_pw:n => `Pick up ${n} power-ups`, m_total:n => `Collect ${n} 💎 in total`, m_score:n => `Score ${n} in one run`
+  }
+};
+let lang = (navigator.language || "ru").slice(0, 2);
+lang = ["ru","uk","be","kk","uz"].includes(lang) ? "ru" : "en";
+const T = k => I18N[lang][k];
+
+// =====================================================================
+//  ДАННЫЕ ИГРЫ: корабли, системы, задания, награды
+// =====================================================================
+const SKINS = [
+  { id:"dart",   shape:"dart",   body:"#ffffff", glow:"#7fd0ff", trail:"#78c8ff", price:0,    name:{ru:"Стрела",  en:"Arrow"} },
+  { id:"ember",  shape:"dart",   body:"#ffd9b0", glow:"#ff7a2e", trail:"fire",    price:150,  name:{ru:"Уголёк",  en:"Ember"} },
+  { id:"saucer", shape:"saucer", body:"#c4ffd8", glow:"#36e58a", trail:"#5cf0a0", price:300,  name:{ru:"Тарелка", en:"Saucer"} },
+  { id:"comet",  shape:"orb",    body:"#eef8ff", glow:"#8fd8ff", trail:"#bfe8ff", ads:3,      name:{ru:"Комета",  en:"Comet"} },
+  { id:"needle", shape:"needle", body:"#ffd0f4", glow:"#ff4fd2", trail:"#ff7ae0", price:500,  name:{ru:"Игла",    en:"Needle"} },
+  { id:"wing",   shape:"wing",   body:"#dfe8ff", glow:"#6f8cff", trail:"#9fb2ff", price:800,  name:{ru:"Сокол",   en:"Falcon"} },
+  { id:"void",   shape:"dart",   body:"#1a0d2e", glow:"#b04dff", trail:"#9b4dff", daily:true, stroke:"#d49bff", name:{ru:"Пустота", en:"Void"} },
+  { id:"crown",  shape:"crown",  body:"#fff1b8", glow:"#ffc93c", trail:"#ffd76a", price:1200, name:{ru:"Корона",  en:"Crown"} },
+  { id:"prism",  shape:"prism",  body:"#ffffff", glow:"#ffffff", trail:"rainbow", price:2000, name:{ru:"Призма",  en:"Prism"} }
+];
+const SKIN = id => SKINS.find(s => s.id === id) || SKINS[0];
+
+const THEMES = [
+  { name:{ru:"Лазурная",   en:"Azure"},    planet:["#a9c2ff","#4a5fd0","#1d2370"], bg:"#101a40", neb:[90,125,255],  root:0 },
+  { name:{ru:"Багровая",   en:"Crimson"},  planet:["#ffc0a8","#d0533f","#5a1420"], bg:"#2a0f1c", neb:[255,90,80],   root:-2 },
+  { name:{ru:"Изумрудная", en:"Emerald"},  planet:["#c2ffd8","#35a96d","#0f4a30"], bg:"#0b2a24", neb:[60,220,150],  root:3 },
+  { name:{ru:"Аметистовая",en:"Amethyst"}, planet:["#e6c4ff","#8a4fd0","#2e1570"], bg:"#1e1040", neb:[180,100,255], root:-4, rings:true },
+  { name:{ru:"Золотая",    en:"Golden"},   planet:["#fff2b8","#d6a33f","#5a3a10"], bg:"#2a1f0c", neb:[255,190,70],  root:5, rings:true }
+];
+const SYSTEM_EVERY = 25;
+
+const MISSION_TYPES = {
+  gems_run:{ targets:[15,25,40,60],    reward:t => t * 2,              best:true },
+  survive: { targets:[30,45,75,120],   reward:t => Math.round(t * 0.9), best:true },
+  score:   { targets:[30,50,80,120],   reward:t => Math.round(t * 1.2), best:true },
+  near:    { targets:[5,12,25,40],     reward:t => t * 4 },
+  runs:    { targets:[3,5,8,12],       reward:t => t * 10 },
+  pw:      { targets:[2,4,7,12],       reward:t => t * 12 },
+  total:   { targets:[60,150,300,600], reward:t => Math.round(t * 0.5) }
+};
+const DAILY = [20, 30, 40, 60, 80, 100, 150];
+
+// =====================================================================
+//  СОХРАНЕНИЕ (локально + облако ВК)
+// =====================================================================
+const DEFAULT_SAVE = { v:2, crystals:0, best:0, owned:["dart"], skin:"dart", adViews:{}, daily:{ last:"", streak:0 },
+                       missions:[], stats:{ runs:0, gems:0, near:0, pw:0 }, tutorial:true, muted:false };
+function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+function lsSet(k, v){ try { localStorage.setItem(k, v); } catch(e){} }
+function mergeSave(raw){
+  const s = JSON.parse(JSON.stringify(DEFAULT_SAVE));
+  if (raw && typeof raw === "object") {
+    for (const k of Object.keys(s)) if (raw[k] !== undefined) s[k] = raw[k];
+    s.stats = Object.assign({}, DEFAULT_SAVE.stats, raw.stats || {});
+    s.daily = Object.assign({}, DEFAULT_SAVE.daily, raw.daily || {});
+  }
+  if (!s.owned.includes("dart")) s.owned.push("dart");
+  return s;
+}
+let SAVE = (() => {
+  let raw = null; try { raw = JSON.parse(lsGet("orbita_save")); } catch(e){}
+  const s = mergeSave(raw);
+  const oldBest = +(lsGet("orbita_best") || 0); if (oldBest > s.best) s.best = oldBest;   // перенос рекорда из 1-й версии
+  return s;
+})();
+let cloudTimer = null;
+function persist(){
+  lsSet("orbita_save", JSON.stringify(SAVE));
+  if (platform === "vk") {
+    clearTimeout(cloudTimer);
+    cloudTimer = setTimeout(() => {
+      const v = JSON.stringify(SAVE);
+      if (v.length < 4000) vkBridge.send("VKWebAppStorageSet", { key:"save", value:v }).catch(() => {});
+    }, 1500);
+  }
+}
+
+// =====================================================================
+//  ПЛОЩАДКИ: ВК Игры, CrazyGames, Яндекс Игры
+// =====================================================================
+let platform = "none", ysdk = null, adPlaying = false, lastInterstitial = 0;
+const params = new URLSearchParams(location.search);
+// та же игра в Одноклассниках (через VK Bridge): там нет рейтинга и окна записи на стену
+const isOK = params.get("vk_client") === "ok" || /_ok$/.test(params.get("vk_platform") || "");
+function loadScript(src, onload){ const s = document.createElement("script"); s.src = src; s.async = true; s.onload = onload; s.onerror = () => {}; document.head.appendChild(s); }
+function setLangFrom(code){ if (!code) return; lang = ["ru","uk","be","kk","uz"].includes(code) ? "ru" : "en"; applyLang(); }
+(function initPlatform(){
+  const host = location.hostname, ref = document.referrer || "";
+  if (params.has("vk_app_id") || params.get("platform") === "vk") {
+    loadScript("https://unpkg.com/@vkontakte/vk-bridge@2.15.0/dist/browser.min.js", () => {
+      if (!window.vkBridge || !vkBridge.isEmbedded()) return;
+      platform = "vk"; document.body.classList.add("vk");
+      if (isOK) document.body.classList.add("ok");
+      vkBridge.send("VKWebAppInit").catch(() => {});
+      // сворачивание мобильного клиента ВК: звук и игра на паузу (правила ВК, п. 2.2.5)
+      vkBridge.subscribe(e => {
+        const t = e && e.detail && e.detail.type;
+        if (t === "VKWebAppViewHide") onHide();
+        else if (t === "VKWebAppViewRestore") onShow();
+      });
+      setLangFrom(params.get("vk_language"));
+      vkBridge.send("VKWebAppStorageGet", { keys:["save"] }).then(d => {
+        const v = d && d.keys && d.keys[0] && d.keys[0].value;
+        if (!v) return;
+        const remote = mergeSave(JSON.parse(v));
+        if ((remote.stats.runs || 0) > (SAVE.stats.runs || 0)) { SAVE = remote; lsSet("orbita_save", JSON.stringify(SAVE)); refreshMenu(); }
+      }).catch(() => {});
+    });
+  } else if (host.includes("crazygames") || ref.includes("crazygames") || params.get("platform") === "crazygames") {
+    loadScript("https://sdk.crazygames.com/crazygames-sdk-v3.js", () => {
+      if (!window.CrazyGames) return;
+      CrazyGames.SDK.init().then(() => { platform = "crazygames"; }).catch(() => {});
+    });
+  } else if (location.protocol !== "file:" && !["localhost", "127.0.0.1"].includes(host) && !host.endsWith("github.io")) {
+    loadScript("/sdk.js", () => {
+      if (!window.YaGames) return;
+      YaGames.init().then(sdk => {
+        ysdk = sdk; platform = "yandex";
+        setLangFrom(sdk.environment && sdk.environment.i18n && sdk.environment.i18n.lang);
+        if (sdk.features && sdk.features.LoadingAPI) sdk.features.LoadingAPI.ready();
+      }).catch(() => {});
+    });
+  }
+})();
+function gameplay(on){
+  try {
+    if (platform === "yandex") { const g = ysdk.features && ysdk.features.GameplayAPI; if (g) on ? g.start() : g.stop(); }
+    else if (platform === "crazygames") on ? CrazyGames.SDK.game.gameplayStart() : CrazyGames.SDK.game.gameplayStop();
+  } catch(e){}
+}
+function adOpen(){ adPlaying = true; if (ac) ac.suspend(); }
+function adClose(){ adPlaying = false; if (ac && !document.hidden) ac.resume(); }
+function showInterstitial(next){
+  if (platform === "none" || Date.now() - lastInterstitial < 60000 || S.sessionRuns < 2) { next(); return; }  // первые 2 забега без рекламы
+  lastInterstitial = Date.now();
+  const done = () => { adClose(); next(); };
+  try {
+    if (platform === "yandex") ysdk.adv.showFullscreenAdv({ callbacks:{ onOpen:adOpen, onClose:done, onError:done } });
+    else if (platform === "crazygames") CrazyGames.SDK.ad.requestAd("midgame", { adStarted:adOpen, adFinished:done, adError:done });
+    else if (platform === "vk") { adOpen(); vkBridge.send("VKWebAppShowNativeAds", { ad_format:"interstitial" }).catch(() => {}).finally(done); }
+  } catch(e){ done(); }
+}
+function showRewarded(onReward){
+  const fail = () => { adClose(); toast(T("noAd")); };
+  if (platform === "none") { onReward(); return; }
+  try {
+    if (platform === "yandex") {
+      let got = false;
+      ysdk.adv.showRewardedVideo({ callbacks:{ onOpen:adOpen, onRewarded:() => { got = true; },
+        onClose:() => { adClose(); if (got) onReward(); }, onError:fail } });
+    } else if (platform === "crazygames") {
+      CrazyGames.SDK.ad.requestAd("rewarded", { adStarted:adOpen, adFinished:() => { adClose(); onReward(); }, adError:fail });
+    } else if (platform === "vk") {
+      adOpen();
+      vkBridge.send("VKWebAppShowNativeAds", { ad_format:"reward" })
+        .then(d => { adClose(); if (d && d.result) onReward(); else toast(T("noAd")); }).catch(fail);
+    }
+  } catch(e){ fail(); }
+}
+function haptic(kind){
+  try {
+    if (platform === "vk") vkBridge.send("VKWebAppTapticImpactOccurred", { style: kind === "heavy" ? "heavy" : "light" }).catch(() => {});
+    else if (navigator.vibrate) navigator.vibrate(kind === "heavy" ? 60 : 15);
+  } catch(e){}
+}
+
+// =====================================================================
+//  ЗВУК И МУЗЫКА (синтез, без файлов)
+// =====================================================================
+let ac = null, master = null, musicBus = null, musicTimer = null, nextNoteT = 0, step = 0;
+function unlockAudio(){
+  if (ac) return;
+  try {
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    master = ac.createGain(); master.gain.value = SAVE.muted ? 0 : 1; master.connect(ac.destination);
+    musicBus = ac.createGain(); musicBus.gain.value = 0.55;
+    const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2200;
+    musicBus.connect(lp).connect(master);
+    nextNoteT = ac.currentTime + 0.1;
+    musicTimer = setInterval(scheduleMusic, 90);
+  } catch(e){ ac = null; }
+}
+function tone(t, freq, dur, type, vol, dest, slide){
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g).connect(dest); o.start(t); o.stop(t + dur + 0.02);
+}
+function sfx(freq, dur, type = "sine", vol = 0.12, slide = 0){
+  if (!ac || adPlaying || document.hidden || SAVE.muted) return;
+  tone(ac.currentTime, freq, dur, type, vol, master, slide);
+}
+const PENTA = [0, 3, 5, 7, 10, 12, 15];
+const ARP = [0, 2, 4, 2, 5, 3, 4, 1];
+const PROG = [0, -4, -2, -5];
+function scheduleMusic(){
+  if (!ac || ac.state !== "running" || SAVE.muted) return;
+  if (nextNoteT < ac.currentTime - 0.1) nextNoteT = ac.currentTime + 0.05;
+  const bpm = S.state === "play" ? 96 + (S.omega - 1.7) * 28 : 80;
+  const spb = 60 / bpm / 2;
+  const root = 220 * Math.pow(2, THEMES[S.sys % THEMES.length].root / 12);
+  while (nextNoteT < ac.currentTime + 0.3) {
+    const bar = Math.floor(step / 8) % 4, k = step % 8;
+    tone(nextNoteT, root * Math.pow(2, (PROG[bar] + PENTA[ARP[k]] + 12) / 12), 0.22, "triangle", 0.03, musicBus);
+    if (k === 0) tone(nextNoteT, root * Math.pow(2, (PROG[bar] - 12) / 12), spb * 7.5, "sine", 0.06, musicBus);
+    if (S.state === "play" && k % 2 === 0) tone(nextNoteT, 70, 0.08, "sine", 0.05, musicBus, -30);  // мягкий «пульс» в игре
+    nextNoteT += spb; step++;
+  }
+}
+
+// =====================================================================
+//  ХОЛСТ И РАСКЛАДКА
+// =====================================================================
+const cv = document.getElementById("c"), g = cv.getContext("2d");
+let W, H, DPR, CX, CY, BASE, PLANET, R = [0, 0], SHIP, ROCK, GEM;
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  CX = W / 2; CY = H / 2 + Math.min(30, H * 0.03);
+  BASE = Math.min(W, H * 0.92);
+  PLANET = BASE * 0.10; R = [BASE * 0.22, BASE * 0.35];
+  SHIP = BASE * 0.024; ROCK = BASE * 0.032; GEM = BASE * 0.024;
+}
+window.addEventListener("resize", resize); resize();
+
+const STARS = Array.from({ length: 170 }, () => ({ r: Math.sqrt(Math.random()) * 1.15, a: Math.random() * 6.283,
+  s: Math.random() * 1.7 + 0.3, p: Math.random() * 6.28, layer: Math.random() < 0.35 ? 2 : 1 }));
+const NEBULA = Array.from({ length: 3 }, (_, i) => ({ a: i * 2.1, r: 0.55 + i * 0.12, size: 0.6 + Math.random() * 0.3, sp: 0.02 + i * 0.01 }));
+
+// =====================================================================
+//  СОСТОЯНИЕ
+// =====================================================================
+const S = { state:"menu", paused:false, score:0, theta:-Math.PI / 2, orbit:0, t:0, omega:1.7, objs:[], parts:[], trail:[], texts:[],
+            spawnT:0.8, time:0, shake:0, flash:0, inv:0, continued:false, doubled:false, deadT:0, gems:0, combo:0, lastGem:-9,
+            shield:false, magnet:0, slow:0, sys:0, banner:null, comet:null, switched:false, sessionRuns:0, nearRun:0, pwRun:0 };
+const $ = id => document.getElementById(id);
+
+const angDiff = (a, b) => { let d = (a - b) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
+const shipPos = () => { const r = R[0] + (R[1] - R[0]) * S.t; return [CX + Math.cos(S.theta) * r, CY + Math.sin(S.theta) * r]; };
+const objPos = o => [CX + Math.cos(o.a) * R[o.orbit], CY + Math.sin(o.a) * R[o.orbit]];
+
+// =====================================================================
+//  ЗАДАНИЯ И НАГРАДЫ
+// =====================================================================
+function newMission(){
+  const have = SAVE.missions.map(m => m.type);
+  const pool = Object.keys(MISSION_TYPES).filter(k => !have.includes(k));
+  const type = pool[Math.floor(Math.random() * pool.length)];
+  const def = MISSION_TYPES[type];
+  const lvl = Math.min(def.targets.length - 1, Math.floor(SAVE.stats.runs / 8) + (Math.random() < 0.4 ? 1 : 0));
+  const target = def.targets[lvl];
+  return { type, target, reward: def.reward(target), progress: 0, done: false };
+}
+function ensureMissions(){ while (SAVE.missions.length < 3) SAVE.missions.push(newMission()); }
+function missionText(m){ return T("m_" + m.type)(m.target); }
+function bumpMission(type, value, absolute){
+  let changed = false;
+  for (const m of SAVE.missions) {
+    if (m.type !== type || m.done) continue;
+    m.progress = absolute ? Math.max(m.progress, value) : m.progress + value;
+    if (m.progress >= m.target) { m.progress = m.target; m.done = true; toast("🎯 " + T("missionDone") + " " + missionText(m)); sfx(1200, 0.25, "triangle", 0.1, 600); }
+    changed = true;
+  }
+  return changed;
+}
+function claimMission(i){
+  const m = SAVE.missions[i]; if (!m || !m.done) return;
+  SAVE.crystals += m.reward; SAVE.missions.splice(i, 1); ensureMissions(); persist();
+  sfx(880, 0.15, "triangle", 0.12, 500); renderMissions(); refreshMenu();
+}
+function dateKey(off = 0){ const d = new Date(); d.setDate(d.getDate() + off); return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate(); }
+function dailyState(){
+  const can = SAVE.daily.last !== dateKey(0);
+  const day = can ? (SAVE.daily.last === dateKey(-1) ? SAVE.daily.streak % 7 + 1 : 1) : SAVE.daily.streak;
+  return { can, day };
+}
+function claimDaily(){
+  const st = dailyState(); if (!st.can) return;
+  SAVE.crystals += DAILY[st.day - 1];
+  SAVE.daily = { last: dateKey(0), streak: st.day };
+  if (st.day === 7 && !SAVE.owned.includes("void")) { SAVE.owned.push("void"); toast("🚀 " + T("unlocked") + " " + SKIN("void").name[lang]); }
+  persist(); sfx(660, 0.12, "triangle", 0.12, 400); setTimeout(() => sfx(990, 0.2, "triangle", 0.12, 500), 120);
+  renderDaily(); refreshMenu();
+}
+
+// =====================================================================
+//  ИГРОВОЙ ПРОЦЕСС
+// =====================================================================
+function startGame(){
+  Object.assign(S, { state:"play", paused:false, score:0, theta:-Math.PI / 2, orbit:0, t:0, omega:1.7, objs:[], trail:[], texts:[],
+                     spawnT:0.8, time:0, inv:0, continued:false, doubled:false, gems:0, combo:0, lastGem:-9, shield:false, magnet:0,
+                     slow:0, sys:0, banner:null, comet:null, switched:false, nearRun:0, pwRun:0, lastSwitch:-9 });
+  updateHud(); show(null); gameplay(true);
+}
+
+function spawn(){
+  const lead = Math.min(2.6, S.omega * (0.95 + Math.random() * 0.7));
+  const a = S.theta + lead;
+  const tutorialHold = SAVE.tutorial && (!S.switched || S.time < 6);
+  if (!tutorialHold && S.score >= 15 && !S.comet && Math.random() < 0.13 && spawnComet()) return;
+  let type = Math.random() < 0.36 ? "gem" : "rock";
+  if (!tutorialHold && S.score >= 4 && Math.random() < 0.06) type = "pw";
+  if (tutorialHold && type === "rock") type = "gem";
+  let orbit = Math.random() < 0.5 ? 0 : 1;
+  if (type === "rock" && S.comet) orbit = S.comet.orbit;           // пока летит комета, другая орбита остаётся свободной
+  const gap = Math.max(0.6, S.omega * 0.32);
+  for (const o of S.objs) {
+    if (o.type === "comet") continue;
+    const d = Math.abs(angDiff(o.a, a));
+    if (o.orbit === orbit && d < 0.3) return;
+    if (type === "rock" && o.type === "rock" && o.orbit !== orbit && d < gap) return;   // всегда остаётся проход
+  }
+  const o = { type, orbit, a, age:0, ttl: lead / S.omega + 0.6, rot:(Math.random() - 0.5) * 3,
+              verts: Array.from({ length: 9 }, () => 0.72 + Math.random() * 0.4) };
+  if (type === "pw") o.kind = ["shield", "magnet", "slow"][Math.floor(Math.random() * 3)];
+  S.objs.push(o);
+}
+function spawnComet(){
+  const orbit = Math.random() < 0.5 ? 0 : 1, other = 1 - orbit;
+  for (const o of S.objs) {
+    if (o.type !== "rock" || o.orbit !== other) continue;
+    const d = angDiff(o.a, S.theta);
+    if (d > -0.3 && d < 3.6) return false;   // комета не должна загонять в астероид
+  }
+  const start = 3.0, va = -(0.9 + Math.random() * 0.4);
+  const o = { type:"comet", orbit, a: S.theta + start, va, age:0, ttl: 0.55 + start / (S.omega - va) + 1.0 };
+  S.objs.push(o); S.comet = o;
+  sfx(300, 0.4, "sawtooth", 0.05, 500);
+  return true;
+}
+
+function burst(x, y, color, n, speed){
+  for (let i = 0; i < n; i++) {
+    const ang = Math.random() * 6.28, v = speed * (0.3 + Math.random());
+    S.parts.push({ x, y, vx: Math.cos(ang) * v, vy: Math.sin(ang) * v, life: 0.5 + Math.random() * 0.5, color, size: 2 + Math.random() * 3 });
+  }
+}
+function floatText(x, y, text, color){ S.texts.push({ x, y, text, color, life: 1 }); }
+
+function collectGem(o, x, y){
+  o.dead = true;
+  S.combo = S.time - S.lastGem < 1.6 ? S.combo + 1 : 1; S.lastGem = S.time;
+  const pts = S.combo >= 10 ? 3 : S.combo >= 5 ? 2 : 1;
+  addScore(pts); S.gems++;
+  burst(x, y, "#66ffee", 14, BASE * 0.35);
+  if (pts > 1) floatText(x, y, "+" + pts, "#ffd66b");
+  sfx(880 + Math.min(S.combo, 20) * 30, 0.12, "triangle", 0.1, 400);
+  bumpMission("gems_run", S.gems, true);
+  updateHud();
+}
+function addScore(n){
+  S.score += n;
+  const sys = Math.floor(S.score / SYSTEM_EVERY);
+  if (sys !== S.sys) {
+    S.sys = sys; S.flash = 0.6;
+    S.banner = { text: `${T("system")} ${sys + 1} · ${THEMES[sys % THEMES.length].name[lang]}`, life: 2.4 };
+    sfx(523, 0.3, "triangle", 0.1); setTimeout(() => sfx(784, 0.4, "triangle", 0.1), 150);
+  }
+  bumpMission("score", S.score, true);
+}
+function pickPower(o, x, y){
+  o.dead = true; S.pwRun++;
+  if (o.kind === "shield") S.shield = true;
+  if (o.kind === "magnet") S.magnet = 8;
+  if (o.kind === "slow") S.slow = 5;
+  floatText(x, y, T(o.kind), "#9fe0ff");
+  burst(x, y, "#9fe0ff", 20, BASE * 0.4);
+  sfx(600, 0.3, "triangle", 0.12, 600); haptic("light");
+  bumpMission("pw", 1);
+}
+
+function die(){
+  const [x, y] = shipPos();
+  burst(x, y, "#ff9a5c", 44, BASE * 0.6); burst(x, y, "#ffffff", 16, BASE * 0.3);
+  S.shake = 0.5; S.flash = 0.5; S.state = "dead"; S.deadT = 0.9; gameplay(false);
+  sfx(200, 0.6, "sawtooth", 0.15, -170); haptic("heavy");
+  const nb = S.score > SAVE.best;
+  if (nb) SAVE.best = S.score;
+  SAVE.crystals += S.gems;
+  persist();
+  $("final").textContent = S.score;
+  $("tag").textContent = nb && S.score > 0 ? T("newBest") : T("best") + ": " + SAVE.best;
+  $("earned").textContent = T("earned")(S.gems);
+  $("contBtn").textContent = platform !== "none" ? T("cont") : T("contFree");
+  $("contBtn").classList.toggle("hidden", S.continued || S.score < 3);
+  $("dblBtn").textContent = (platform !== "none" ? T("dbl") : T("dblFree"))(S.gems);
+  $("dblBtn").classList.toggle("hidden", S.gems < 3 || S.doubled);
+  $("dblBtn").disabled = false;
+  updateHud();
+}
+function endRun(){   // вызывается, когда игрок уходит с экрана крушения
+  if (S.state !== "dead") return;
+  S.state = "over"; S.sessionRuns++;
+  SAVE.stats.runs++; SAVE.stats.gems += S.gems; SAVE.tutorial = false;
+  bumpMission("runs", 1); bumpMission("total", S.gems); bumpMission("survive", Math.floor(S.time), true);
+  persist();
+}
+function continueGame(){
+  S.objs = S.objs.filter(o => o.type === "gem" || o.type === "pw" || Math.abs(angDiff(o.a, S.theta)) > 1.5);
+  if (S.comet && !S.objs.includes(S.comet)) S.comet = null;
+  Object.assign(S, { state:"play", inv:1.8, continued:true });
+  SAVE.crystals -= S.gems;   // кристаллы забега снова «в игре», начислятся при следующем крушении
+  show(null); gameplay(true); updateHud();
+}
+
+function update(rawDt){
+  const dt = rawDt * (S.state === "play" && S.slow > 0 ? 0.55 : 1);
+  S.time += S.state === "play" ? dt : rawDt;
+  for (const p of S.parts) { p.x += p.vx * rawDt; p.y += p.vy * rawDt; p.vx *= 0.96; p.vy *= 0.96; p.life -= rawDt; }
+  S.parts = S.parts.filter(p => p.life > 0);
+  for (const t of S.texts) { t.y -= 40 * rawDt; t.life -= rawDt * 1.2; }
+  S.texts = S.texts.filter(t => t.life > 0);
+  S.shake = Math.max(0, S.shake - rawDt); S.flash = Math.max(0, S.flash - rawDt);
+  if (S.banner) { S.banner.life -= rawDt; if (S.banner.life <= 0) S.banner = null; }
+
+  if (S.state === "menu" || S.state === "over") { S.theta += 0.8 * rawDt; S.t += (0.5 + 0.5 * Math.sin(S.time) - S.t) * rawDt * 2; pushTrail(); return; }
+  if (S.state === "dead") { S.deadT -= rawDt; if (S.deadT <= 0 && $("over").classList.contains("hidden")) show("over"); return; }
+  if (S.state !== "play") return;
+
+  S.omega = Math.min(3.4, 1.7 + S.score * 0.025 + S.time * 0.011);
+  S.theta += S.omega * dt;
+  S.t += (S.orbit - S.t) * Math.min(1, rawDt * 14);
+  S.inv = Math.max(0, S.inv - rawDt);
+  S.magnet = Math.max(0, S.magnet - rawDt); S.slow = Math.max(0, S.slow - rawDt);
+  pushTrail();
+  if (SKIN(SAVE.skin).trail === "fire" && Math.random() < 0.7) {
+    const [fx, fy] = shipPos();
+    S.parts.push({ x: fx, y: fy, vx: (Math.random() - 0.5) * 30, vy: (Math.random() - 0.5) * 30, life: 0.35, color: Math.random() < 0.5 ? "#ff7a2e" : "#ffd23c", size: 2 + Math.random() * 3 });
+  }
+  if (S.combo > 0 && S.time - S.lastGem > 1.6) { S.combo = 0; updateHud(); }
+
+  S.spawnT -= dt;
+  if (S.spawnT <= 0) { S.spawnT = Math.max(0.3, 0.6 - S.score * 0.005 - S.time * 0.002); spawn(); }
+
+  const [sx, sy] = shipPos();
+  for (const o of S.objs) {
+    o.age += dt;
+    if (o.type === "comet" && o.age > 0.55) o.a += o.va * dt;
+    if (o.dead) continue;
+    const appear = o.type === "comet" ? 0.55 : 0.35;
+    if (o.age < appear) continue;
+    const [ox, oy] = objPos(o);
+    const dist = Math.hypot(ox - sx, oy - sy);
+    const danger = o.type === "rock" || o.type === "comet";
+    // опасный пролёт: увернулся в последний момент — сменил орбиту меньше чем за 0.5 с до встречи
+    if (danger && !o.nm && o.orbit !== S.orbit && S.time - S.lastSwitch < 0.5 && Math.abs(angDiff(o.a, S.theta)) < 0.1) {
+      o.nm = true; S.nearRun++; SAVE.stats.near++;
+      const pts = o.type === "comet" ? 2 : 1;
+      addScore(pts); floatText(sx, sy - SHIP * 2, T("near") + " +" + pts, "#ffb36b");
+      sfx(1400, 0.08, "square", 0.04); bumpMission("near", 1); updateHud();
+    }
+    if (o.type === "gem") {
+      const magnetHit = S.magnet > 0 && Math.abs(angDiff(o.a, S.theta)) < 0.13;
+      if (dist < SHIP + GEM * 1.2 || magnetHit) collectGem(o, ox, oy);
+    } else if (o.type === "pw") {
+      if (dist < SHIP + GEM * 1.5) pickPower(o, ox, oy);
+    } else if (dist < SHIP + ROCK * (o.type === "comet" ? 0.95 : 0.85)) {
+      if (S.inv > 0) continue;
+      if (S.shield) {
+        S.shield = false; o.dead = true; S.inv = 0.5; S.shake = 0.25;
+        burst(ox, oy, "#9fe0ff", 30, BASE * 0.5); sfx(320, 0.3, "square", 0.08, -100); haptic("light");
+        continue;
+      }
+      die(); return;
+    }
+  }
+  S.objs = S.objs.filter(o => !o.dead && o.age < o.ttl);
+  if (S.comet && !S.objs.includes(S.comet)) S.comet = null;
+  updatePwHud();
+}
+function pushTrail(){ S.trail.push(shipPos()); if (S.trail.length > 18) S.trail.shift(); }
+
+// =====================================================================
+//  ОТРИСОВКА
+// =====================================================================
+function poly(c, pts, s){ c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x * s, y * s) : c.moveTo(x * s, y * s)); c.closePath(); }
+function drawShip(c, skin, x, y, ang, s, time){
+  c.save(); c.translate(x, y); c.rotate(ang);
+  c.shadowColor = skin.glow; c.shadowBlur = s * 0.9; c.fillStyle = skin.body;
+  switch (skin.shape) {
+    case "needle": poly(c, [[1.7,0],[-0.5,0.38],[-1.2,0],[-0.5,-0.38]], s); c.fill(); break;
+    case "saucer":
+      c.beginPath(); c.ellipse(0, 0, s * 1.2, s * 0.55, 0, 0, 6.29); c.fill();
+      c.fillStyle = skin.glow; c.beginPath(); c.arc(0, 0, s * 0.42, 0, 6.29); c.fill();
+      c.fillStyle = "#fff"; for (const k of [-0.75, 0, 0.75]) { c.beginPath(); c.arc(k * s, k === 0 ? s * 0.3 : s * 0.12, s * 0.1, 0, 6.29); c.fill(); }
+      break;
+    case "orb":
+      c.beginPath(); c.arc(0, 0, s * 0.78, 0, 6.29); c.fill();
+      c.strokeStyle = skin.glow; c.lineWidth = s * 0.18; c.beginPath(); c.arc(0, 0, s * 1.05, -1.2, 1.2); c.stroke();
+      break;
+    case "wing": poly(c, [[1.25,0],[0.15,0.3],[-0.9,1.05],[-0.45,0.15],[-1.1,0],[-0.45,-0.15],[-0.9,-1.05],[0.15,-0.3]], s); c.fill(); break;
+    case "crown": poly(c, [[1.35,0],[-0.6,0.95],[-0.3,0.35],[-1.15,0.6],[-0.8,0],[-1.15,-0.6],[-0.3,-0.35],[-0.6,-0.95]], s); c.fill(); break;
+    case "prism":
+      poly(c, [[1.25,0],[-0.95,1],[-0.95,-1]], s); c.fill();
+      c.shadowBlur = 0; c.strokeStyle = `hsl(${(time * 200) % 360},90%,60%)`; c.lineWidth = s * 0.14;
+      poly(c, [[0.55,0],[-0.6,0.5],[-0.6,-0.5]], s); c.stroke();
+      break;
+    default: poly(c, [[1.3,0],[-1,0.8],[-0.5,0],[-1,-0.8]], s); c.fill();
+  }
+  if (skin.stroke) { c.shadowBlur = s * 0.6; c.strokeStyle = skin.stroke; c.lineWidth = s * 0.12; poly(c, [[1.3,0],[-1,0.8],[-0.5,0],[-1,-0.8]], s); c.stroke(); }
+  c.restore();
+}
+
+function draw(){
+  const th = THEMES[S.sys % THEMES.length], [nr, ng, nb] = th.neb;
+  g.save();
+  const bg = g.createRadialGradient(CX, CY, 0, CX, CY, Math.max(W, H) * 0.8);
+  bg.addColorStop(0, th.bg); bg.addColorStop(1, "#03040a");
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  if (S.shake > 0) { const k = S.shake * BASE * 0.04; g.translate((Math.random() - 0.5) * k, (Math.random() - 0.5) * k); }
+
+  // туманности
+  for (const n of NEBULA) {
+    const a = n.a + S.time * n.sp, nx = CX + Math.cos(a) * BASE * n.r, ny = CY + Math.sin(a) * BASE * n.r * 0.6;
+    const ng2 = g.createRadialGradient(nx, ny, 0, nx, ny, BASE * n.size);
+    ng2.addColorStop(0, `rgba(${nr},${ng},${nb},0.13)`); ng2.addColorStop(1, `rgba(${nr},${ng},${nb},0)`);
+    g.fillStyle = ng2; g.fillRect(0, 0, W, H);
+  }
+  // звёзды в два слоя (параллакс)
+  const span = Math.max(W, H) * 0.75;
+  for (const st of STARS) {
+    const a = st.a + S.time * (st.layer === 2 ? 0.02 : 0.008);
+    g.globalAlpha = 0.3 + 0.35 * Math.sin(st.p + S.time * 1.3);
+    g.fillStyle = "#fff"; g.fillRect(CX + Math.cos(a) * st.r * span, CY + Math.sin(a) * st.r * span, st.s, st.s);
+  }
+  g.globalAlpha = 1;
+
+  // орбиты
+  g.setLineDash([6, 10]); g.lineDashOffset = -S.time * 20; g.lineWidth = 2;
+  R.forEach((r, i) => {
+    const active = i === S.orbit && S.state === "play";
+    g.strokeStyle = active ? `rgba(${nr},${ng},${nb},0.65)` : "#ffffff22";
+    g.beginPath(); g.arc(CX, CY, r, 0, Math.PI * 2); g.stroke();
+  });
+  g.setLineDash([]);
+
+  // планета
+  const [p1, p2, p3] = th.planet;
+  const halo = g.createRadialGradient(CX, CY, PLANET * 0.8, CX, CY, PLANET * 2.3);
+  halo.addColorStop(0, `rgba(${nr},${ng},${nb},0.35)`); halo.addColorStop(1, `rgba(${nr},${ng},${nb},0)`);
+  g.fillStyle = halo; g.beginPath(); g.arc(CX, CY, PLANET * 2.3, 0, 6.29); g.fill();
+  if (th.rings) drawRings(p1, true);
+  const pg = g.createRadialGradient(CX - PLANET * 0.35, CY - PLANET * 0.35, PLANET * 0.1, CX, CY, PLANET);
+  pg.addColorStop(0, p1); pg.addColorStop(0.6, p2); pg.addColorStop(1, p3);
+  g.fillStyle = pg; g.beginPath(); g.arc(CX, CY, PLANET, 0, 6.29); g.fill();
+  g.save(); g.beginPath(); g.arc(CX, CY, PLANET, 0, 6.29); g.clip();   // полосы атмосферы
+  g.globalAlpha = 0.12; g.fillStyle = "#fff";
+  for (let i = -2; i <= 2; i++) g.fillRect(CX - PLANET, CY + i * PLANET * 0.38 + Math.sin(S.time * 0.5 + i) * 3, PLANET * 2, PLANET * 0.1);
+  g.restore(); g.globalAlpha = 1;
+  if (th.rings) drawRings(p1, false);
+
+  // объекты
+  for (const o of S.objs) {
+    const [x, y] = objPos(o);
+    if (o.type === "comet") { drawComet(o, x, y); continue; }
+    const k = Math.min(1, o.age / 0.35);
+    g.save(); g.translate(x, y); g.globalAlpha = k;
+    if (o.age < 0.35) {
+      g.strokeStyle = o.type === "rock" ? "#ff8a6b" : o.type === "pw" ? "#9fe0ff" : "#66ffee"; g.lineWidth = 2;
+      g.beginPath(); g.arc(0, 0, (o.type === "rock" ? ROCK : GEM) * (2 - k), 0, 6.29); g.stroke();
+    }
+    g.scale(k, k);
+    if (o.type === "rock") {
+      g.rotate(o.age * o.rot);
+      g.fillStyle = "#6e6480"; g.strokeStyle = "#c9b6e0"; g.lineWidth = 2;
+      g.beginPath();
+      o.verts.forEach((v, i) => { const an = i / o.verts.length * 6.283; const px = Math.cos(an) * ROCK * v, py = Math.sin(an) * ROCK * v; i ? g.lineTo(px, py) : g.moveTo(px, py); });
+      g.closePath(); g.fill(); g.stroke();
+      g.fillStyle = "#00000033"; g.beginPath(); g.arc(ROCK * 0.25, -ROCK * 0.15, ROCK * 0.22, 0, 6.29); g.fill();
+    } else if (o.type === "gem") {
+      const p = 1 + 0.12 * Math.sin(S.time * 8 + o.a);
+      g.rotate(S.time * 1.5); g.scale(p, p);
+      g.fillStyle = "#66ffee33"; g.beginPath(); g.arc(0, 0, GEM * 1.7, 0, 6.29); g.fill();
+      g.fillStyle = "#7ffff0"; g.strokeStyle = "#ffffff"; g.lineWidth = 1.5;
+      g.beginPath(); g.moveTo(0, -GEM); g.lineTo(GEM * 0.7, 0); g.lineTo(0, GEM); g.lineTo(-GEM * 0.7, 0); g.closePath(); g.fill(); g.stroke();
+    } else {
+      const p = 1 + 0.08 * Math.sin(S.time * 6);
+      g.scale(p, p);
+      g.fillStyle = "#9fe0ff2a"; g.strokeStyle = "#9fe0ff"; g.lineWidth = 2;
+      g.beginPath(); g.arc(0, 0, GEM * 1.6, 0, 6.29); g.fill(); g.stroke();
+      drawPwIcon(o.kind, GEM);
+    }
+    g.restore();
+  }
+
+  // магнит: линии притяжения
+  if (S.state === "play" && S.magnet > 0) {
+    const [sx, sy] = shipPos();
+    g.strokeStyle = "#ff6b8a66"; g.lineWidth = 2;
+    for (const o of S.objs) if (o.type === "gem" && Math.abs(angDiff(o.a, S.theta)) < 0.6) {
+      const [ox, oy] = objPos(o); g.beginPath(); g.moveTo(sx, sy); g.lineTo(ox, oy); g.stroke();
+    }
+  }
+
+  // шлейф и корабль
+  const skin = SKIN(SAVE.skin);
+  if (S.state !== "dead") {
+    for (let i = 1; i < S.trail.length; i++) {
+      const f = i / S.trail.length;
+      g.strokeStyle = skin.trail === "rainbow" ? `hsla(${(S.time * 200 + i * 22) % 360},90%,65%,${f * 0.7})`
+                    : skin.trail === "fire" ? `rgba(255,${120 + i * 6},40,${f * 0.6})` : hexA(skin.trail, f * 0.55);
+      g.lineWidth = SHIP * 0.7 * f;
+      g.beginPath(); g.moveTo(...S.trail[i - 1]); g.lineTo(...S.trail[i]); g.stroke();
+    }
+    const blink = S.inv > 0 && Math.floor(S.time * 12) % 2 === 0;
+    const [x, y] = shipPos();
+    if (!blink) drawShip(g, skin, x, y, S.theta + Math.PI / 2, SHIP, S.time);
+    if (S.shield && S.state === "play") {
+      g.strokeStyle = `rgba(159,224,255,${0.6 + 0.3 * Math.sin(S.time * 8)})`; g.lineWidth = 2.5;
+      g.beginPath(); g.arc(x, y, SHIP * 1.9, 0, 6.29); g.stroke();
+    }
+  }
+
+  // частицы и всплывающие надписи
+  for (const p of S.parts) { g.globalAlpha = Math.max(0, p.life); g.fillStyle = p.color; g.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size); }
+  g.globalAlpha = 1;
+  g.textAlign = "center"; g.textBaseline = "middle";
+  for (const t of S.texts) {
+    g.globalAlpha = Math.min(1, t.life * 1.5); g.fillStyle = t.color;
+    g.font = `800 ${Math.round(BASE * 0.04)}px system-ui,sans-serif`; g.fillText(t.text, t.x, t.y);
+  }
+  g.globalAlpha = 1;
+
+  // баннер новой системы
+  if (S.banner) {
+    g.globalAlpha = Math.min(1, S.banner.life, (2.4 - S.banner.life) * 3);
+    g.fillStyle = "#fff"; g.font = `800 ${Math.round(BASE * 0.055)}px system-ui,sans-serif`;
+    g.fillText(S.banner.text, CX, CY - R[1] - BASE * 0.07);
+    g.globalAlpha = 1;
+  }
+  // подсказка при первом запуске
+  if (S.state === "play" && SAVE.tutorial && !S.switched) {
+    const pulse = 0.6 + 0.4 * Math.sin(S.time * 5);
+    g.globalAlpha = pulse; g.fillStyle = "#fff"; g.font = `700 ${Math.round(BASE * 0.045)}px system-ui,sans-serif`;
+    g.fillText("👆 " + T("tap"), CX, CY + R[1] + BASE * 0.09);
+    g.globalAlpha = 1;
+  }
+  if (S.flash > 0) { g.fillStyle = `rgba(255,255,255,${S.flash * 0.35})`; g.fillRect(-50, -50, W + 100, H + 100); }
+  g.restore();
+}
+function drawRings(color, back){
+  g.save(); g.translate(CX, CY); g.rotate(-0.35);
+  g.strokeStyle = hexA(color, 0.55); g.lineWidth = PLANET * 0.14;
+  g.beginPath(); g.ellipse(0, 0, PLANET * 1.75, PLANET * 0.45, 0, back ? Math.PI : 0, back ? Math.PI * 2 : Math.PI); g.stroke();
+  g.restore();
+}
+function drawComet(o, x, y){
+  if (o.age < 0.55) {   // предупреждение
+    const k = o.age / 0.55;
+    g.strokeStyle = `rgba(255,120,90,${0.5 + 0.5 * Math.sin(o.age * 30)})`; g.lineWidth = 3;
+    g.beginPath(); g.arc(x, y, ROCK * (2.2 - k), 0, 6.29); g.stroke();
+    g.fillStyle = "#ff7a5a"; g.font = `800 ${Math.round(ROCK * 1.6)}px system-ui`; g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText("!", x, y);
+    return;
+  }
+  for (let k = 12; k >= 1; k--) {   // хвост
+    const a = o.a + k * 0.03 * Math.sign(-o.va), r = R[o.orbit];
+    g.fillStyle = `rgba(255,${150 + k * 6},90,${(1 - k / 13) * 0.55})`;
+    g.beginPath(); g.arc(CX + Math.cos(a) * r, CY + Math.sin(a) * r, ROCK * (1 - k / 16), 0, 6.29); g.fill();
+  }
+  const cg = g.createRadialGradient(x, y, 0, x, y, ROCK * 1.4);
+  cg.addColorStop(0, "#ffffff"); cg.addColorStop(0.4, "#ffc46b"); cg.addColorStop(1, "rgba(255,120,60,0)");
+  g.fillStyle = cg; g.beginPath(); g.arc(x, y, ROCK * 1.4, 0, 6.29); g.fill();
+}
+function drawPwIcon(kind, s){
+  g.lineCap = "round"; g.lineJoin = "round";
+  if (kind === "shield") {
+    g.fillStyle = "#bfeaff"; g.beginPath();
+    g.moveTo(0, -s * 0.9); g.lineTo(s * 0.75, -s * 0.55); g.lineTo(s * 0.6, s * 0.35); g.lineTo(0, s * 0.95);
+    g.lineTo(-s * 0.6, s * 0.35); g.lineTo(-s * 0.75, -s * 0.55); g.closePath(); g.fill();
+    g.strokeStyle = "#2a6c9a"; g.lineWidth = s * 0.16; g.beginPath(); g.moveTo(0, -s * 0.55); g.lineTo(0, s * 0.6); g.stroke();
+  } else if (kind === "magnet") {
+    g.strokeStyle = "#ff5a7a"; g.lineWidth = s * 0.42;
+    g.beginPath(); g.arc(0, -s * 0.05, s * 0.5, 0, Math.PI); g.stroke();
+    g.beginPath(); g.moveTo(-s * 0.5, -s * 0.05); g.lineTo(-s * 0.5, -s * 0.55); g.moveTo(s * 0.5, -s * 0.05); g.lineTo(s * 0.5, -s * 0.55); g.stroke();
+    g.strokeStyle = "#ffffff"; g.beginPath(); g.moveTo(-s * 0.5, -s * 0.5); g.lineTo(-s * 0.5, -s * 0.72); g.moveTo(s * 0.5, -s * 0.5); g.lineTo(s * 0.5, -s * 0.72); g.stroke();
+  } else {
+    g.strokeStyle = "#ffe08a"; g.lineWidth = s * 0.18;
+    g.beginPath(); g.arc(0, 0, s * 0.7, 0, 6.29); g.stroke();
+    g.beginPath(); g.moveTo(0, 0); g.lineTo(0, -s * 0.45); g.moveTo(0, 0); g.lineTo(s * 0.32, s * 0.2); g.stroke();
+  }
+}
+function hexA(hex, a){ const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
+
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (!S.paused && !adPlaying) update(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+
+// =====================================================================
+//  ИНТЕРФЕЙС
+// =====================================================================
+const SCREENS = ["menu", "shop", "missions", "daily", "over", "pause"];
+function show(id){
+  SCREENS.forEach(s => $(s).classList.toggle("hidden", s !== id));
+  const inGame = id === null || id === "pause" || id === "over";
+  $("score").style.visibility = inGame ? "visible" : "hidden";
+  $("sub").style.visibility = inGame ? "visible" : "hidden";
+  $("pw").style.visibility = id === null ? "visible" : "hidden";
+  $("pauseBtn").style.visibility = id === null ? "visible" : "hidden";
+}
+function applyLang(){
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-i]").forEach(el => el.textContent = T(el.dataset.i));
+  updateHud(); refreshMenu();
+}
+function updateHud(){
+  $("score").textContent = S.score;
+  $("gemsHud").textContent = "💎 " + S.gems;
+  $("combo").textContent = S.combo >= 3 ? "×" + S.combo : "";
+}
+function updatePwHud(){
+  const items = [];
+  if (S.shield) items.push("🛡️");
+  if (S.magnet > 0) items.push("🧲 " + Math.ceil(S.magnet));
+  if (S.slow > 0) items.push("⏳ " + Math.ceil(S.slow));
+  const html = items.map(s => `<span>${s}</span>`).join("");
+  if ($("pw").innerHTML !== html) $("pw").innerHTML = html;
+}
+function refreshMenu(){
+  ensureMissions();
+  $("mCrystals").textContent = SAVE.crystals; $("mBest").textContent = SAVE.best;
+  document.querySelectorAll(".crys").forEach(el => el.textContent = SAVE.crystals);
+  const claimable = SAVE.missions.filter(m => m.done).length;
+  $("missBadge").textContent = claimable || "";
+  $("dailyBadge").textContent = dailyState().can ? "!" : "";
+  const affordable = SKINS.filter(s => !SAVE.owned.includes(s.id) && s.price && s.price <= SAVE.crystals).length;
+  $("shopBadge").textContent = affordable || "";
+  muteBtn.textContent = SAVE.muted ? "🔇" : "🔊";
+}
+let toastTimer = null;
+function toast(text){
+  const t = $("toast"); t.textContent = text; t.classList.add("on");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("on"), 2600);
+}
+
+function renderShop(){
+  document.querySelectorAll(".crys").forEach(el => el.textContent = SAVE.crystals);
+  const grid = $("shopGrid"); grid.innerHTML = "";
+  for (const s of SKINS) {
+    const owned = SAVE.owned.includes(s.id), sel = SAVE.skin === s.id;
+    const card = document.createElement("div"); card.className = "card" + (sel ? " sel" : "");
+    const c = document.createElement("canvas"); c.width = 168; c.height = 168;
+    card.appendChild(c);
+    const name = document.createElement("b"); name.textContent = s.name[lang]; card.appendChild(name);
+    const btn = document.createElement("button");
+    if (owned) { btn.textContent = sel ? T("selected") : T("select"); btn.disabled = sel; btn.onclick = () => { SAVE.skin = s.id; persist(); renderShop(); sfx(700, 0.08, "triangle", 0.08); }; }
+    else if (s.price) { btn.textContent = `${s.price} 💎`; btn.className = "buy"; btn.onclick = () => buySkin(s); }
+    else if (s.ads) { const v = SAVE.adViews[s.id] || 0; btn.textContent = T("adBtn")(v, s.ads); btn.className = "ad"; btn.onclick = () => showRewarded(() => adSkin(s)); }
+    else if (s.daily) { btn.textContent = "🎁 " + T("day7"); btn.onclick = () => { renderDaily(); show("daily"); }; }
+    card.appendChild(btn); grid.appendChild(card);
+    const cc = c.getContext("2d"); cc.scale(2, 2);
+    const pg = cc.createRadialGradient(42, 42, 0, 42, 42, 42); pg.addColorStop(0, hexA(s.glow, 0.25)); pg.addColorStop(1, hexA(s.glow, 0));
+    cc.fillStyle = pg; cc.fillRect(0, 0, 84, 84);
+    drawShip(cc, s, 42, 42, -Math.PI / 4, 16, 1.2);
+  }
+}
+function buySkin(s){
+  if (SAVE.crystals < s.price) { toast(T("notEnough")); sfx(180, 0.15, "square", 0.05); return; }
+  SAVE.crystals -= s.price; SAVE.owned.push(s.id); SAVE.skin = s.id; persist();
+  toast("🚀 " + T("unlocked") + " " + s.name[lang]); sfx(660, 0.12, "triangle", 0.12, 300); setTimeout(() => sfx(990, 0.25, "triangle", 0.12, 400), 120);
+  renderShop(); refreshMenu();
+}
+function adSkin(s){
+  SAVE.adViews[s.id] = (SAVE.adViews[s.id] || 0) + 1;
+  if (SAVE.adViews[s.id] >= s.ads) { SAVE.owned.push(s.id); SAVE.skin = s.id; toast("🚀 " + T("unlocked") + " " + s.name[lang]); }
+  persist(); renderShop(); refreshMenu();
+}
+function renderMissions(){
+  ensureMissions();
+  $("missList").innerHTML = SAVE.missions.map((m, i) => `
+    <div class="mission"><div class="t"><div>${missionText(m)}</div>
+      <div class="bar"><i style="width:${Math.round(m.progress / m.target * 100)}%"></i></div>
+      <small>${m.progress} / ${m.target} · +${m.reward} 💎</small></div>
+      ${m.done ? `<button data-claim="${i}">${T("claim")}</button>` : ""}</div>`).join("");
+  $("missList").querySelectorAll("[data-claim]").forEach(b => b.onclick = () => claimMission(+b.dataset.claim));
+  document.querySelectorAll(".crys").forEach(el => el.textContent = SAVE.crystals);
+}
+function renderDaily(){
+  const st = dailyState();
+  $("days").innerHTML = DAILY.map((r, i) => {
+    const d = i + 1, done = d < st.day || (d === st.day && !st.can), cur = d === st.day && st.can;
+    return `<div class="day${done ? " done" : ""}${cur ? " cur" : ""}${d === 7 ? " big" : ""}">${T("dayN")} ${d}<b>${done ? "✓" : "+" + r + " 💎"}${d === 7 ? " + 🚀" : ""}</b></div>`;
+  }).join("");
+  const b = $("claimDaily");
+  b.textContent = st.can ? T("claimDay")(DAILY[st.day - 1]) : T("claimedToday");
+  b.disabled = !st.can;
+}
+
+// ---------- ввод ----------
+function press(){
+  unlockAudio();
+  if (S.state === "play" && !S.paused) {
+    S.orbit ^= 1; S.switched = true; S.lastSwitch = S.time;
+    sfx(420 + S.orbit * 200, 0.07, "triangle", 0.07);
+  }
+}
+cv.addEventListener("pointerdown", e => { e.preventDefault(); press(); });
+window.addEventListener("keydown", e => {
+  if (e.code === "Escape" || e.code === "KeyP") { if (S.paused) resume(); else pauseGame(); return; }
+  if (!["Space","ArrowUp","ArrowDown","Enter"].includes(e.code)) return;
+  e.preventDefault(); unlockAudio();
+  if (S.state === "menu" && !$("menu").classList.contains("hidden")) startGame();
+  else if (S.paused) resume();
+  else press();
+});
+window.addEventListener("contextmenu", e => e.preventDefault());
+
+$("playBtn").onclick = () => { unlockAudio(); startGame(); };
+$("shopBtn").onclick = () => { unlockAudio(); renderShop(); show("shop"); };
+$("missBtn").onclick = () => { unlockAudio(); renderMissions(); show("missions"); };
+$("dailyBtn").onclick = () => { unlockAudio(); renderDaily(); show("daily"); };
+$("claimDaily").onclick = claimDaily;
+document.querySelectorAll("[data-back]").forEach(b => b.onclick = () => { refreshMenu(); show("menu"); });
+$("againBtn").onclick = () => { endRun(); showInterstitial(startGame); };
+$("menuBtn").onclick = () => { endRun(); showInterstitial(() => { S.state = "menu"; S.objs = []; refreshMenu(); show("menu"); }); };
+$("contBtn").onclick = () => showRewarded(continueGame);
+$("dblBtn").onclick = () => showRewarded(() => {
+  if (S.doubled) return;
+  S.doubled = true; SAVE.crystals += S.gems; persist();
+  $("dblBtn").disabled = true; $("earned").textContent = T("earned")(S.gems * 2);
+  sfx(990, 0.25, "triangle", 0.12, 500);
+});
+$("shareBtn").onclick = () => {
+  if (platform !== "vk") return;
+  const appId = params.get("vk_app_id");
+  vkBridge.send("VKWebAppShowWallPostBox", { message: T("shareText")(Math.max(S.score, SAVE.best)), attachments: appId ? `https://vk.com/app${appId}` : "" }).catch(() => {});
+};
+$("rankBtn").onclick = () => { if (platform === "vk" && !isOK) vkBridge.send("VKWebAppShowLeaderBoardBox", { user_result: SAVE.best }).catch(() => {}); };
+// в Одноклассниках окно приглашения требует текст сообщения
+$("inviteBtn").onclick = () => { if (platform === "vk") vkBridge.send("VKWebAppShowInviteBox", isOK ? { message: T("inviteText") } : {}).catch(() => {}); };
+$("resumeBtn").onclick = () => resume();
+function resume(){ S.paused = false; show(null); if (S.state === "play") gameplay(true); }
+function pauseGame(){
+  if (S.state !== "play" || S.paused) return;
+  S.paused = true; show("pause"); gameplay(false);
+}
+// выход в меню посреди забега: забег засчитывается, собранные кристаллы остаются (без рекламы)
+function quitRun(){
+  if (S.state !== "play") { S.paused = false; refreshMenu(); show("menu"); return; }
+  if (S.score > SAVE.best) SAVE.best = S.score;
+  SAVE.crystals += S.gems;
+  S.state = "dead"; endRun();
+  S.paused = false; S.state = "menu"; S.objs = [];
+  gameplay(false); refreshMenu(); show("menu");
+}
+$("pauseBtn").onclick = e => { e.stopPropagation(); pauseGame(); };
+$("pauseBtn").addEventListener("pointerdown", e => e.stopPropagation());
+$("quitBtn").onclick = () => quitRun();
+const muteBtn = $("mute");
+muteBtn.onclick = e => {
+  e.stopPropagation(); unlockAudio();
+  SAVE.muted = !SAVE.muted; persist();
+  if (master) master.gain.value = SAVE.muted ? 0 : 1;
+  refreshMenu();
+};
+muteBtn.addEventListener("pointerdown", e => e.stopPropagation());
+
+function onHide(){
+  if (ac) ac.suspend();
+  pauseGame();
+}
+function onShow(){ if (ac && !adPlaying && !document.hidden) ac.resume(); }
+document.addEventListener("visibilitychange", () => { if (document.hidden) onHide(); else onShow(); });
+
+// ---------- старт ----------
+ensureMissions(); persist();
+applyLang(); show("menu");
+if (dailyState().can) setTimeout(() => { if (!$("menu").classList.contains("hidden")) { renderDaily(); show("daily"); } }, 700);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
