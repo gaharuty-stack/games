@@ -114,13 +114,23 @@ export class FailPopup extends Popup {
   drawContent(ctx, time, x, y) {
     const cx = this.cx;
     if (this.reason === 'shelf') {
-      drawSprite(ctx, 'nest', cx - 60, y + 160, 80);
-      drawSprite(ctx, 'nest', cx + 60, y + 160, 80);
-      drawSprite(ctx, 'lock', cx, y + 140, 70 * (1 + Math.sin(time * 4) * 0.04));
+      // та самая полка: гнёзда со стрелками, которые на ней стоят
+      const cols = (this.scene.shelf || []).filter(Boolean).map((a) => a.color).slice(0, 5);
+      if (!cols.length) cols.push('red', 'blue', 'green', 'gold');
+      const n = cols.length, sp = 96;
+      cols.forEach((c, i) => {
+        const ax = cx + (i - (n - 1) / 2) * sp;
+        drawSprite(ctx, 'nest', ax, y + 204, 88);
+        drawSprite(ctx, `arrow_${c}_0`, ax, y + 170 + Math.sin(time * 3 + i * 0.9) * 2.5, 92);
+      });
     } else {
-      for (let i = 0; i < 3; i++) drawSprite(ctx, 'heart_empty', cx - 70 + i * 70, y + 150, 60);
+      for (let i = 0; i < 3; i++) drawSprite(ctx, 'heart_empty', cx - 76 + i * 76, y + 172, 66);
     }
-    text(ctx, 'Не сдавайся — ты почти у цели!', cx, y + 232, 28, { stroke: null, color: DARK, weight: 800, maxW: this.w - 80 });
+    // «почти у цели» — только когда это правда
+    const sc = this.scene;
+    const total = sc.lv && sc.lv.queue ? sc.lv.queue.length : 0;
+    const msg = total && sc.boxesDone / total >= 0.6 ? 'Не сдавайся — ты почти у цели!' : 'Не сдавайся — у тебя получится!';
+    text(ctx, msg, cx, y + 262, 28, { stroke: null, color: DARK, weight: 800, maxW: this.w - 80 });
   }
 }
 

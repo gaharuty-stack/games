@@ -85,22 +85,8 @@ export class Background {
     this.twinkles = [];
     for (let i = 0; i < 18; i++) this.twinkles.push({ x: r() * vw, y: r() * vh * 0.5, p: r() * 6, s: 3 + r() * 4 });
 
-    // луна
-    const mx = vw * 0.84, my = vh * 0.1, mr = m * 0.055;
-    const glow = ctx.createRadialGradient(mx, my, mr * 0.5, mx, my, mr * 4);
-    glow.addColorStop(0, 'rgba(255,248,220,.35)');
-    glow.addColorStop(1, 'rgba(255,248,220,0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath(); ctx.arc(mx, my, mr * 4, 0, Math.PI * 2); ctx.fill();
-    const mg = ctx.createRadialGradient(mx - mr * 0.3, my - mr * 0.3, mr * 0.1, mx, my, mr);
-    mg.addColorStop(0, '#fffdf0');
-    mg.addColorStop(1, '#f1e2b0');
-    ctx.fillStyle = mg;
-    ctx.beginPath(); ctx.arc(mx, my, mr, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(200,180,130,.35)';
-    [[0.3, -0.2, 0.18], [-0.25, 0.25, 0.13], [0.1, 0.4, 0.09]].forEach(([dx, dy, rr2]) => {
-      ctx.beginPath(); ctx.arc(mx + dx * mr, my + dy * mr, rr2 * mr, 0, Math.PI * 2); ctx.fill();
-    });
+    // луна — отдельным слоем: каждая сцена ставит её туда, где она не мешает интерфейсу
+    this.buildMoon(m * 0.055, dpr);
 
     // дальние холмы
     const hillY = vh * 0.74;
@@ -208,6 +194,30 @@ export class Background {
     for (let i = 0; i < n; i++) this.flakes.push(this.newFlake(true));
   }
 
+  buildMoon(mr, dpr) {
+    const R = mr * 4;
+    const c = this.moonCanvas || (this.moonCanvas = document.createElement('canvas'));
+    c.width = c.height = Math.ceil(R * 2 * dpr);
+    const ctx = c.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const mx = R, my = R;
+    const glow = ctx.createRadialGradient(mx, my, mr * 0.5, mx, my, R);
+    glow.addColorStop(0, 'rgba(255,248,220,.35)');
+    glow.addColorStop(1, 'rgba(255,248,220,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(mx, my, R, 0, Math.PI * 2); ctx.fill();
+    const mg = ctx.createRadialGradient(mx - mr * 0.3, my - mr * 0.3, mr * 0.1, mx, my, mr);
+    mg.addColorStop(0, '#fffdf0');
+    mg.addColorStop(1, '#f1e2b0');
+    ctx.fillStyle = mg;
+    ctx.beginPath(); ctx.arc(mx, my, mr, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(200,180,130,.35)';
+    [[0.3, -0.2, 0.18], [-0.25, 0.25, 0.13], [0.1, 0.4, 0.09]].forEach(([dx, dy, rr2]) => {
+      ctx.beginPath(); ctx.arc(mx + dx * mr, my + dy * mr, rr2 * mr, 0, Math.PI * 2); ctx.fill();
+    });
+    this.moonR = R;
+  }
+
   newFlake(anywhere) {
     const depth = Math.random();
     return {
@@ -224,6 +234,11 @@ export class Background {
   draw(ctx, dpr, dt, time) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(this.canvas, 0, 0);
+    if (this.moonCanvas) {
+      // moonPos — в CSS-пикселях; без него луна в правом верхнем углу
+      const [mx, my] = this.moonPos || [this.w * 0.84, this.h * 0.1];
+      ctx.drawImage(this.moonCanvas, Math.round((mx - this.moonR) * dpr), Math.round((my - this.moonR) * dpr));
+    }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     for (const t of this.twinkles || []) {
       const a = 0.5 + 0.5 * Math.sin(time * 2.2 + t.p);

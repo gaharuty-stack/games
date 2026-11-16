@@ -119,8 +119,10 @@ export class MenuScene {
       const col = Math.min(720, W);
       const left = W / 2 - col / 2;
       this.titleX = W / 2;
-      this.titleY = 150;
-      const top = 300, bottom = H - 330;
+      // заголовок ниже счётчика монет; сверху у ёлки запас под звезду, чтобы она не заходила на ленту
+      this.titleY = 164;
+      const top = 345, bottom = H - 330;
+      this.moon = [left + col - 92, 410];
       this.treeW = Math.min(470, ((bottom - top) * 420) / 580);
       this.treeX = W / 2 - 30;
       this.treeY = top + ((this.treeW * 580) / 420) / 2 + Math.max(0, (bottom - top - (this.treeW * 580) / 420) / 2);
@@ -144,11 +146,13 @@ export class MenuScene {
       row.forEach((b, i) => { b.x = rx + (i - (row.length - 1) / 2) * 130; b.y = H * 0.8; });
       this.btnSettings.x = 58; this.btnSettings.y = 56;
       this.coinsPos = [W - 118, 56];
+      this.moon = [Math.max(150, this.treeX - this.treeW * 0.48), 140];
     }
     this.treeTop = this.treeY - ((this.treeW * 580) / 420) / 2 + (32 / 580) * ((this.treeW * 580) / 420);
   }
 
   onResize() { this.layout(); }
+  moonPos() { return this.moon; }
 
   treePt(p) {
     const k = this.treeW / 420;

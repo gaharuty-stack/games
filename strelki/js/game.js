@@ -14,6 +14,7 @@ const MAX_SLOTS = 7;
 const LID_REST = -37;
 const BOW_REST = -66;
 const BS = 1.16; // общий масштаб коробок
+const CAP = 0.42; // высота полосы под снег и гирлянду над полем, в клетках
 
 export function getLevel(n) {
   if (n <= LEVELS.length) return decodeLevel(LEVELS[n - 1], n);
@@ -103,17 +104,20 @@ export class GameScene {
       L.heartsY = 142;
       L.heartsX = W / 2 - 128;
       L.counter = [W / 2 + 116, 142];
-      L.box = [[W / 2 - 100, 282], [W / 2 + 100, 282]];
-      L.preview = [W / 2 + 232, 276];
+      L.box = [[W / 2 - 100, 276], [W / 2 + 100, 276]];
+      L.preview = [W / 2 + 232, 272];
       L.boosterY = H - 92;
       L.boosters = [[W / 2 - 150, H - 92], [W / 2, H - 92], [W / 2 + 150, H - 92]];
       L.shelfY = H - 238;
       L.shelfCX = W / 2;
       L.shelfMaxW = col - 40;
-      const top = 376, bottom = H - 330;
-      L.cell = Math.min((col - 44) / w, (bottom - top) / h, 98);
+      // сверху поля — полоса под снежную шапку и гирлянду, чтобы они не закрывали первый ряд
+      const top = 396, bottom = H - 340;
+      L.cell = Math.min((col - 44) / w, (bottom - top) / (h + CAP), 98);
+      L.cap = L.cell * CAP;
       L.bx = W / 2 - (w * L.cell) / 2;
-      L.by = top + (bottom - top - h * L.cell) / 2;
+      L.by = top + L.cap + (bottom - top - L.cap - h * L.cell) / 2;
+      L.moon = [left + 84, 196];
     } else {
       const px = W - 250;
       L.cx = px;
@@ -126,15 +130,19 @@ export class GameScene {
       L.heartsX = px - 160;
       L.counter = [px + 120, 136];
       L.box = [[px - 100, 270], [px + 100, 270]];
-      L.preview = [px + 205, 345];
+      // очередь коробок — строкой под коробками: справа от них она упиралась в край экрана
+      L.preview = [px, 376];
+      L.previewRow = true;
       L.boosters = [[px - 135, H - 90], [px, H - 90], [px + 135, H - 90]];
       L.shelfY = H - 255;
       L.shelfCX = px;
       L.shelfMaxW = 470;
-      const top = 156, bottom = H - 26;
-      L.cell = Math.min((boardW - 20) / w, (bottom - top) / h, 100);
+      const top = 146, bottom = H - 24;
+      L.cell = Math.min((boardW - 20) / w, (bottom - top) / (h + CAP), 100);
+      L.cap = L.cell * CAP;
       L.bx = bcx - (w * L.cell) / 2;
-      L.by = top + (bottom - top - h * L.cell) / 2;
+      L.by = top + L.cap + (bottom - top - L.cap - h * L.cell) / 2;
+      L.moon = [px - 150, 60];
     }
     L.pad = L.cell * 0.26;
     this.L = L;
@@ -156,6 +164,7 @@ export class GameScene {
 
   onResize() { this.layout(); }
   onArtRebuilt() { this.layoutShelf(); this.buildBoard(); }
+  moonPos() { return this.L.moon; }
 
   slotPos(i) {
     const L = this.L;
@@ -173,15 +182,17 @@ export class GameScene {
     const L = this.L;
     const sc = this.app.artScale;
     const pad = L.pad;
-    const bw = w * L.cell + pad * 2, bh = h * L.cell + pad * 2;
+    const cap = L.cap;
+    const bw = w * L.cell + pad * 2, bh = h * L.cell + pad * 2 + cap;
     const c = document.createElement('canvas');
     c.width = Math.ceil(bw * sc);
     c.height = Math.ceil(bh * sc);
     const ctx = c.getContext('2d');
     ctx.scale(sc, sc);
+    // подложка почти непрозрачная: сквозь неё не должны просвечивать домики и ёлки фона
     const g = ctx.createLinearGradient(0, 0, 0, bh);
-    g.addColorStop(0, 'rgba(18,44,104,.86)');
-    g.addColorStop(1, 'rgba(9,24,62,.92)');
+    g.addColorStop(0, 'rgba(20,48,110,.97)');
+    g.addColorStop(1, 'rgba(10,26,66,.98)');
     ctx.fillStyle = g;
     rr(ctx, 2, 2, bw - 4, bh - 4, Math.min(48, L.cell * 0.5));
     ctx.fill();
@@ -195,10 +206,10 @@ export class GameScene {
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         if (!mask[y * w + x]) continue;
-        drawSprite(ctx, 'socket', pad + (x + 0.5) * L.cell, pad + (y + 0.5) * L.cell, L.cell);
+        drawSprite(ctx, 'socket', pad + (x + 0.5) * L.cell, pad + cap + (y + 0.5) * L.cell, L.cell);
       }
     }
-    this.boardImg = { canvas: c, x: L.bx - pad, y: L.by - pad, w: bw, h: bh };
+    this.boardImg = { canvas: c, x: L.bx - pad, y: L.by - pad - cap, w: bw, h: bh };
   }
 
   // ---------- логика коробок и полки ----------
@@ -800,7 +811,7 @@ export class GameScene {
     const x0 = bi.x + 26, x1 = bi.x + bi.w - 26, y = bi.y + 10;
     const swags = Math.max(2, Math.round((x1 - x0) / 200));
     const sw = (x1 - x0) / swags;
-    const sag = Math.min(34, this.L.cell * 0.36);
+    const sag = Math.min(18, this.L.cap * 0.45);
     ctx.strokeStyle = '#173a1f';
     ctx.lineWidth = 3;
     ctx.beginPath();
@@ -885,6 +896,20 @@ export class GameScene {
     if (!next.length) return;
     const [x, y] = L.preview;
     ctx.fillStyle = 'rgba(8,22,58,.55)';
+    if (L.previewRow) {
+      // строка: «далее» и мини-коробки
+      const wRow = 104 + next.length * 56;
+      const x0 = x - wRow / 2;
+      rr(ctx, x0, y - 27, wRow, 54, 27);
+      ctx.fill();
+      text(ctx, 'далее', x0 + 54, y + 1, 20, { stroke: null, weight: 800, color: '#bfe0ff' });
+      next.forEach((c, i) => {
+        const bx = x0 + 120 + i * 56;
+        drawSprite(ctx, `boxback_${c}`, bx, y + 2, 50, { alpha: 0.95 });
+        drawSprite(ctx, `boxfront_${c}`, bx, y + 2, 50, { alpha: 0.95 });
+      });
+      return;
+    }
     rr(ctx, x - 38, y - 56, 76, 30 + next.length * 46, 20);
     ctx.fill();
     text(ctx, 'далее', x, y - 40, 18, { stroke: null, weight: 800, color: '#bfe0ff' });
@@ -935,7 +960,7 @@ export class GameScene {
     // подпись бонусов
     if (this.aim) {
       const t = 'Выбери любую стрелку — снежок выбьет её!';
-      const y = L.by - L.pad - 30;
+      const y = L.by - L.pad - L.cap - 26;
       ctx.fillStyle = 'rgba(8,22,58,.8)';
       ctx.font = `800 26px Nunito, Arial`;
       const w = Math.min(this.app.view.DW - 30, ctx.measureText(t).width + 50);

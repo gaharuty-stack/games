@@ -221,6 +221,8 @@ class App {
   draw(dt) {
     const { ctx } = this;
     const { dpr, s, DW, DH } = this.view;
+    const moon = this.scene && this.scene.moonPos ? this.scene.moonPos() : null;
+    this.bg.moonPos = moon ? [moon[0] * s, moon[1] * s] : null;
     this.bg.draw(ctx, dpr, dt, this.time);
     ctx.setTransform(dpr * s, 0, 0, dpr * s, 0, 0);
     if (this.scene) this.scene.draw(ctx, this.time);
