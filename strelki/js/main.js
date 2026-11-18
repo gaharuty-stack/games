@@ -1,5 +1,5 @@
 // Точка входа: цикл, масштабирование, ввод, сцены, всплывающие окна.
-import { buildArt } from './art.js';
+import { buildArt, loadRaster } from './art.js';
 import { Background } from './bg.js';
 import { Tweens, Ease } from './tween.js';
 import { AUDIO } from './audio.js';
@@ -40,7 +40,12 @@ class App {
       await Promise.all([document.fonts.load('900 40px Nunito'), document.fonts.load('800 40px Nunito')]);
     } catch (e) { /* системный шрифт */ }
     const bar = document.getElementById('bootbar');
-    await buildArt(this.targetArtScale(), (p) => { if (bar) bar.style.width = Math.round(p * 100) + '%'; });
+    const prog = [0, 0];
+    const show = () => { if (bar) bar.style.width = Math.round((prog[0] * 0.85 + prog[1] * 0.15) * 100) + '%'; };
+    await Promise.all([
+      loadRaster((p) => { prog[0] = p; show(); }),
+      buildArt(this.targetArtScale(), (p) => { prog[1] = p; show(); }),
+    ]);
     this.artScale = this.targetArtScale();
     this.bg.build(this.view.vw, this.view.vh, this.view.dpr);
     const boot = document.getElementById('boot');
@@ -87,6 +92,12 @@ class App {
         if (this.scene && this.scene.onArtRebuilt) this.scene.onArtRebuilt();
       }
     }, 250);
+  }
+
+  // фон сцены: map — { k, ox, oy } в дизайн-единицах (k — единиц на пиксель референса)
+  setBg(key, map) {
+    const s = this.view.s;
+    this.bg.set({ key, mode: 'stage', ox: map.ox * s, oy: map.oy * s, k: map.k * s, extend: !!map.extend });
   }
 
   setScene(scene) {
@@ -221,12 +232,10 @@ class App {
   draw(dt) {
     const { ctx } = this;
     const { dpr, s, DW, DH } = this.view;
-    const moon = this.scene && this.scene.moonPos ? this.scene.moonPos() : null;
-    this.bg.moonPos = moon ? [moon[0] * s, moon[1] * s] : null;
-    this.bg.draw(ctx, dpr, dt, this.time);
+    this.bg.draw(ctx);
     ctx.setTransform(dpr * s, 0, 0, dpr * s, 0, 0);
     if (this.scene) this.scene.draw(ctx, this.time);
-    this.bg.drawSnow(ctx, dpr, dt, this.time);
+    this.bg.drawSnow(ctx, dpr, dt);
     ctx.setTransform(dpr * s, 0, 0, dpr * s, 0, 0);
     if (this.scene && this.scene.drawOver) this.scene.drawOver(ctx, this.time);
     for (const p of this.popups) p.draw(ctx, this.time);
@@ -238,9 +247,12 @@ class App {
       ctx.globalAlpha = a;
       ctx.font = `800 30px Nunito, Arial`;
       const w = Math.min(DW - 40, ctx.measureText(t.msg).width + 60);
-      ctx.fillStyle = 'rgba(10,25,60,.88)';
+      ctx.fillStyle = 'rgba(70,30,8,.9)';
       rr(ctx, DW / 2 - w / 2, ty - 30, w, 60, 30);
       ctx.fill();
+      ctx.strokeStyle = 'rgba(255,214,160,.7)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
       text(ctx, t.msg, DW / 2, ty + 1, 28, { stroke: null, weight: 800, maxW: w - 40 });
       ctx.restore();
       ty += 72;
@@ -250,7 +262,7 @@ class App {
       ctx.fillStyle = 'rgba(0,0,0,.85)';
       ctx.fillRect(0, 0, DW, DH);
       text(ctx, a.type === 'reward' ? 'Реклама с наградой (тест)' : 'Реклама (тест)', DW / 2, DH / 2 - 20, 40);
-      text(ctx, 'В ВКонтакте здесь будет настоящая реклама', DW / 2, DH / 2 + 34, 24, { stroke: null, weight: 800 });
+      text(ctx, 'В игре здесь будет настоящая реклама', DW / 2, DH / 2 + 34, 24, { stroke: null, weight: 800 });
       ctx.fillStyle = '#ffd23a';
       ctx.fillRect(DW / 2 - 150, DH / 2 + 80, 300 * Math.min(1, a.t / a.dur), 10);
     }

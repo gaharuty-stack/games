@@ -1,102 +1,115 @@
-// Главное меню: ёлка наряжается по мере прохождения уровней.
-import { drawSprite, TREE_TIERS, PAL } from './art.js';
-import { Button, text, rr, drawRibbon } from './ui.js';
-import { Ease } from './tween.js';
+// Главное меню — как на референсе «новое меню»: ёлка со снеговиком на фоне,
+// логотип, «Играть», прогресс украшения ёлки и три круглые кнопки.
+import { drawSprite, drawAt, meta, spr } from './art.js';
+import { Button, text, rr, drawCounterPill } from './ui.js';
+import { Ease, clamp } from './tween.js';
 import { Particles } from './particles.js';
 import { SAVE, persist } from './save.js';
 import { VK } from './vk.js';
-import { rng } from './level.js';
-import { DailyPopup, SettingsPopup, MessagePopup, dailyAvailable } from './popups.js';
+import { stageOf, REF_W } from './bg.js';
+import {
+  DailyPopup, SettingsPopup, MessagePopup, AchievementsPopup, RatingPopup, ShopPopup,
+  dailyAvailable, achClaimable, MAX_DECOR,
+} from './popups.js';
 
-export const MAX_DECOR = 40;
-const ORN = ['red', 'gold', 'blue', 'purple', 'pink', 'cyan', 'green', 'orange'];
+export { MAX_DECOR };
 
-// Точки для игрушек в координатах спрайта ёлки (420×580)
-function decorPoints() {
-  const pts = [];
-  const rows = [
-    [0, 446, 0.78, 7], [0, 402, 0.62, 6],
-    [1, 346, 0.78, 6], [1, 306, 0.55, 5],
-    [2, 248, 0.78, 5], [2, 212, 0.5, 4],
-    [3, 150, 0.75, 4], [3, 108, 0.45, 2], [3, 74, 0.2, 1],
-  ];
-  const r = rng(77);
-  for (const [ti, y, spread, n] of rows) {
-    const t = TREE_TIERS[ti];
-    const k = Math.pow(Math.max(0.05, (y - t.top) / (t.bot - t.top)), 0.75);
-    const hw = t.hw * k * spread;
-    for (let i = 0; i < n; i++) {
-      const u = n === 1 ? 0 : -1 + (2 * i) / (n - 1);
-      pts.push([210 + u * hw + (r() - 0.5) * 14, y + (r() - 0.5) * 10]);
-    }
-  }
-  // перемешиваем, чтобы ёлка наряжалась равномерно
-  for (let i = pts.length - 1; i > 0; i--) {
-    const j = Math.floor(r() * (i + 1));
-    [pts[i], pts[j]] = [pts[j], pts[i]];
-  }
-  return pts.slice(0, MAX_DECOR).map((p, i) => ({
-    x: p[0], y: p[1],
-    kind: i % 9 === 4 ? 'candy' : i % 9 === 7 ? 'bell' : 'orn_' + ORN[i % ORN.length],
-  }));
-}
-const POINTS = decorPoints();
+// позиции на референсе (пиксели картинки 1672×941)
+const R = {
+  logo: [812, 82, 1552, 382],
+  play: [928, 388, 1478, 598],
+  progress: [955, 610, 1462, 744],
+  ach: [976, 756, 1148, 899],
+  rate: [1142, 756, 1314, 899],
+  gifts: [1307, 756, 1479, 899],
+  settings: [34, 18, 152, 138],
+  plus: [1564, 24, 1641, 101],
+  coin: [1415, 62, 70], // центр и ширина монеты
+  pill: [1424, 35, 1590, 90],
+};
+const cxOf = (r) => (r[0] + r[2]) / 2;
+const cyOf = (r) => (r[1] + r[3]) / 2;
+const wOf = (r) => r[2] - r[0];
+const hOf = (r) => r[3] - r[1];
 
 export class MenuScene {
   constructor(app) {
     this.app = app;
     this.t = 0;
     this.particles = new Particles();
-    const done = Math.min(MAX_DECOR, SAVE.data.level - 1);
-    this.shown = Math.min(SAVE.data.decor || 0, done);
-    this.target = done;
-    this.decorK = POINTS.map((_, i) => (i < this.shown ? 1 : 0));
-    this.starK = done >= 10 && (SAVE.data.decor || 0) >= 10 ? 1 : 0;
-    this.blink = 0;
+    const target = Math.min(MAX_DECOR, Math.max(0, SAVE.data.level - 1));
+    this.decorTarget = target;
+    const shown = Math.min(SAVE.data.decor || 0, target);
     this.coinsShown = SAVE.data.coins;
-    this.play = new Button({ w: 430, h: 128, style: 'green', label: 'Играть', size: 56, sub: `Уровень ${SAVE.data.level}`, pulse: true });
-    this.play.onClick = () => app.startLevel(SAVE.data.level);
-    this.btnGift = new Button({ round: true, w: 100, style: 'red', icon: 'gift', iconW: 70 });
-    this.btnGift.onClick = () => this.openDaily();
-    this.btnTop = new Button({ round: true, w: 100, style: 'gold', icon: 'i_trophy', iconW: 58, visible: VK.hasLeaderboard });
-    this.btnTop.onClick = () => VK.leaderboard(SAVE.data.level - 1);
-    this.btnInvite = new Button({ round: true, w: 100, style: 'purple', icon: 'i_invite', iconW: 58, visible: VK.inVK });
-    this.btnInvite.onClick = () => VK.invite();
-    this.btnSettings = new Button({ round: true, w: 84, style: 'blue', icon: 'i_gear', iconW: 50 });
-    this.btnSettings.onClick = () => app.addPopup(new SettingsPopup(app));
-    this.buttons = [this.play, this.btnGift, this.btnTop, this.btnInvite, this.btnSettings];
+    // ёлка «в полутьме»: каждая зажжённая игрушка — круглое окошко в тёмной копии ёлки
+    const TM = meta('tree_dark');
+    this.treeRect = TM.rect || [0, 0, 1, 1];
+    this.wins = (TM.windows || []).slice(0, MAX_DECOR);
+    this.starWin = TM.star || [0, 0, 0];
+    this.lit = this.wins.map((_, i) => (i < shown ? 1 : 0));
+    this.starK = shown >= 10 ? 1 : 0;
+    this.darkA = shown >= MAX_DECOR ? 0 : 1;
+    this.flashes = [];
+    this.treeDirty = true;
+    this.lights = (meta('bg_menu').lights || []).map((p, i) => {
+      // каждый огонёк гирлянды горит, только когда зажжена ближайшая игрушка
+      let near = -1, best = 1e9;
+      this.wins.forEach((w, j) => { const d = Math.hypot(w[0] - p[0], w[1] - p[1]); if (d < w[2] * 1.45 && d < best) { best = d; near = j; } });
+      const inStar = Math.hypot(this.starWin[0] - p[0], this.starWin[1] - p[1]) < this.starWin[2] * 1.4;
+      return { x: p[0], y: p[1], r: p[2], ph: (i * 2.39) % 6.28, sp: 1.6 + ((i * 7) % 5) * 0.35, near, inStar };
+    });
+
+    const mk = (sprite, onClick, extra = {}) => new Button({ sprite, onClick, ...extra });
+    this.play = mk('btn_play', () => app.startLevel(SAVE.data.level), { pulse: true });
+    this.btnAch = mk('btn_ach', () => this.openAch());
+    this.btnRate = mk('btn_rate', () => app.addPopup(new RatingPopup(app)));
+    this.btnGifts = mk('btn_gifts', () => this.openDaily());
+    this.btnSettings = mk('btn_set_wood', () => app.addPopup(new SettingsPopup(app)));
+    this.btnPlus = mk('btn_plus', () => app.addPopup(new ShopPopup(app)));
+    this.buttons = [this.play, this.btnAch, this.btnRate, this.btnGifts, this.btnSettings, this.btnPlus];
     this.layout();
+  }
+
+  get decorShown() {
+    let n = 0;
+    for (const v of this.lit) n += Math.min(1, v);
+    return n;
+  }
+
+  // зажечь игрушку i: окошко раскрывается, вспышка, искры, звон
+  lightUp(i, k) {
+    const app = this.app;
+    const w = this.wins[i];
+    app.tw.to(this.lit, { [i]: 1 }, 0.5, Ease.outBack);
+    this.flashes.push({ x: w[0], y: w[1], r: w[2], t: 0 });
+    const [x, y] = this.refToDesign(w[0], w[1]);
+    this.particles.sparkles(x, y, 10, 220, 32);
+    app.sfx('box', k % 3);
   }
 
   enter() {
     const app = this.app;
-    let delay = 0.5;
-    // новые игрушки прилетают на ёлку
-    const fresh = [];
-    for (let i = this.shown; i < this.target; i++) fresh.push(i);
-    fresh.forEach((i, k) => {
-      const d = delay + Math.min(k, 6) * 0.32;
-      if (k < 6) {
-        app.tw.wait(d).then(() => {
-          app.tw.to(this.decorK, { [i]: 1 }, 0.45, Ease.outBack).then(() => {
-            const p = this.treePt(POINTS[i]);
-            this.particles.sparkles(p[0], p[1], 8, 180, 30);
-            app.sfx('box', k % 3);
-          });
+    let after = 0.6;
+    const from = Math.round(this.decorShown), to = this.decorTarget;
+    if (to > from) {
+      const STEP = 0.42;
+      const animated = Math.min(to - from, 6);
+      // первые 6 новых игрушек загораются по одной, остальные — сразу вместе с последней
+      for (let k = 0; k < animated; k++) {
+        const last = k === animated - 1;
+        app.tw.wait(0.5 + k * STEP).then(() => {
+          if (app.scene !== this) return;
+          if (last) for (let i = from + animated; i < to; i++) this.lit[i] = 1;
+          this.lightUp(from + k, k);
+          if (from < 10 && to >= 10 && last) this.lightStar();
+          if (last && to >= MAX_DECOR) this.lightAll();
+          this.treeDirty = true;
         });
-      } else this.decorK[i] = 1;
-    });
-    if (this.target >= 10 && !this.starK) {
-      app.tw.to(this, { starK: 1 }, 0.6, Ease.outBack, delay + Math.min(fresh.length, 6) * 0.32 + 0.2).then(() => {
-        this.particles.sparkles(this.treeX, this.treeTop + 10, 18, 300, 40);
-        app.sfx('win');
-      });
-    }
-    if (fresh.length) {
-      SAVE.data.decor = this.target;
+      }
+      SAVE.data.decor = to;
       persist();
+      after = 0.5 + animated * STEP + (to >= MAX_DECOR ? 1.6 : 0.5);
     }
-    const after = delay + Math.min(fresh.length, 6) * 0.32 + 0.6;
     const noDaily = new URLSearchParams(location.search).has('nodaily');
     if (dailyAvailable() && !noDaily) app.tw.wait(after).then(() => { if (app.scene === this && !app.popups.length) this.openDaily(); });
     else if (VK.inVK && !SAVE.data.favAsked && SAVE.data.level >= 4) {
@@ -109,55 +122,132 @@ export class MenuScene {
     }
   }
 
+  lightStar() {
+    const app = this.app;
+    app.tw.to(this, { starK: 1 }, 0.7, Ease.outBack, 0.25).then(() => {
+      if (app.scene !== this) return;
+      const [x, y] = this.refToDesign(this.starWin[0], this.starWin[1]);
+      this.particles.sparkles(x, y, 20, 320, 42);
+      app.sfx('win');
+    });
+    this.flashes.push({ x: this.starWin[0], y: this.starWin[1], r: this.starWin[2], t: -0.25 });
+  }
+
+  // все 40 игрушек — ёлка сияет целиком
+  lightAll() {
+    const app = this.app;
+    app.tw.to(this, { darkA: 0 }, 1.2, Ease.inOutQuad, 0.5).then(() => {
+      if (app.scene !== this) return;
+      const r = this.treeRect;
+      for (let i = 0; i < 4; i++) {
+        const [x, y] = this.refToDesign(r[0] + (r[2] - r[0]) * (0.3 + i * 0.13), r[1] + (r[3] - r[1]) * (0.25 + (i % 2) * 0.35));
+        this.particles.sparkles(x, y, 14, 300, 40);
+      }
+      app.sfx('win');
+    });
+  }
+
+  refToDesign(x, y) {
+    const m = this.map;
+    return [m.ox + x * m.k, m.oy + y * m.k];
+  }
+
   openDaily() {
     this.app.addPopup(new DailyPopup(this.app, () => { this.particles.confetti(this.app.view.DW / 2, this.app.view.DH * 0.5, 40); }));
   }
 
+  openAch() {
+    this.app.addPopup(new AchievementsPopup(this.app));
+  }
+
+  // ---------- раскладка ----------
   layout() {
-    const { DW: W, DH: H, landscape } = this.app.view;
-    if (!landscape) {
+    const view = this.app.view;
+    const { DW: W, DH: H, landscape } = view;
+    const P = {};
+    if (landscape) {
+      // всё — ровно как на референсе, сцена вписана в экран
+      const st = stageOf(view);
+      this.map = st;
+      const at = (r) => ({ x: st.ox + cxOf(r) * st.k, y: st.oy + cyOf(r) * st.k, k: st.k });
+      for (const key of ['logo', 'play', 'progress', 'ach', 'rate', 'gifts', 'settings', 'plus']) P[key] = at(R[key]);
+      P.coin = { x: st.ox + R.coin[0] * st.k, y: st.oy + R.coin[1] * st.k, w: R.coin[2] * st.k };
+      P.pill = { x: st.ox + R.pill[0] * st.k, y: st.oy + R.pill[1] * st.k, w: wOf(R.pill) * st.k, h: hOf(R.pill) * st.k };
+      this.app.setBg('menu', st);
+    } else {
+      // портрет: логотип сверху, кнопки снизу, между ними — вся сцена (ёлка со звездой и снеговик);
+      // небо выше и снег ниже картинки дорисовываются продолжением её краёв
       const col = Math.min(720, W);
       const left = W / 2 - col / 2;
-      this.titleX = W / 2;
-      // заголовок ниже счётчика монет; сверху у ёлки запас под звезду, чтобы она не заходила на ленту
-      this.titleY = 164;
-      const top = 345, bottom = H - 330;
-      this.moon = [left + col - 92, 410];
-      this.treeW = Math.min(470, ((bottom - top) * 420) / 580);
-      this.treeX = W / 2 - 30;
-      this.treeY = top + ((this.treeW * 580) / 420) / 2 + Math.max(0, (bottom - top - (this.treeW * 580) / 420) / 2);
-      this.snowman = [W / 2 + Math.min(230, col * 0.33), this.treeY + this.treeW * 0.45, Math.min(190, this.treeW * 0.45)];
-      this.play.x = W / 2; this.play.y = H - 215;
-      const by = H - 78;
-      const row = [this.btnGift, this.btnTop, this.btnInvite].filter((b) => b.visible);
-      row.forEach((b, i) => { b.x = W / 2 + (i - (row.length - 1) / 2) * 130; b.y = by; });
-      this.btnSettings.x = left + 60; this.btnSettings.y = 62;
-      this.coinsPos = [left + col - 112, 62];
-    } else {
-      this.treeW = Math.min(520, ((H - 120) * 420) / 580);
-      this.treeX = W * 0.3;
-      this.treeY = H / 2 + 24;
-      this.snowman = [this.treeX + this.treeW * 0.56, this.treeY + this.treeW * 0.62, this.treeW * 0.36];
-      const rx = W * 0.72;
-      this.titleX = rx;
-      this.titleY = H * 0.24;
-      this.play.x = rx; this.play.y = H * 0.6;
-      const row = [this.btnGift, this.btnTop, this.btnInvite].filter((b) => b.visible);
-      row.forEach((b, i) => { b.x = rx + (i - (row.length - 1) / 2) * 130; b.y = H * 0.8; });
-      this.btnSettings.x = 58; this.btnSettings.y = 56;
-      this.coinsPos = [W - 118, 56];
-      this.moon = [Math.max(150, this.treeX - this.treeW * 0.48), 140];
+      const right = left + col;
+      const topY = 66;
+      const kSet = 104 / wOf(R.settings);
+      P.settings = { x: left + 66, y: topY, k: kSet };
+      const kPlus = 66 / wOf(R.plus);
+      P.plus = { x: right - 50, y: topY, k: kPlus };
+      P.pill = { x: right - 50 - 172, y: topY - 26, w: 172, h: 52 };
+      P.coin = { x: right - 50 - 168, y: topY, w: 64 };
+      const lw = Math.min(650, col - 50);
+      const kLogo = lw / wOf(R.logo);
+      const logoTop = 104;
+      P.logo = { x: W / 2, y: logoTop + (hOf(R.logo) * kLogo) / 2, k: kLogo };
+      const logoBottom = logoTop + hOf(R.logo) * kLogo;
+      const kRow = Math.min(0.95, (col - 30) / (3 * 172));
+      const rowY = H - 20 - (hOf(R.ach) * kRow) / 2;
+      P.ach = { x: W / 2 - 172 * kRow, y: rowY, k: kRow };
+      P.rate = { x: W / 2, y: rowY, k: kRow };
+      P.gifts = { x: W / 2 + 172 * kRow, y: rowY, k: kRow };
+      const kProg = Math.min(0.95, (col - 50) / wOf(R.progress));
+      const progY = rowY - (hOf(R.ach) * kRow) / 2 - 14 - (hOf(R.progress) * kProg) / 2;
+      P.progress = { x: W / 2, y: progY, k: kProg };
+      const kPlay = Math.min(0.92, (col - 70) / wOf(R.play));
+      P.play = { x: W / 2, y: progY - (hOf(R.progress) * kProg) / 2 - 2 - (hOf(R.play) * kPlay) / 2, k: kPlay };
+      const stackTop = P.play.y - (hOf(R.play) * kPlay) / 2;
+      // сцена: по ширине — от снеговика (x≈110) до правого края ёлки (x≈880);
+      // по высоте — от звезды (y≈12) до шарфа снеговика (y≈620) между логотипом и кнопкой «Играть»
+      const SX0 = 110, SX1 = 880, SY0 = 12, SY1 = 620;
+      // картинка всегда закрывает всю ширину экрана (по бокам без пустот)
+      const k = Math.max(W / REF_W, Math.min(W / (SX1 - SX0), (stackTop - logoBottom - 6) / (SY1 - SY0), 1.4));
+      let ox = W / 2 - ((SX0 + SX1) / 2) * k;
+      ox = Math.min(0, Math.max(W - REF_W * k, ox));
+      const map = { k, ox, oy: logoBottom + 4 - SY0 * k, extend: true };
+      this.map = map;
+      this.app.setBg('menu', map);
     }
-    this.treeTop = this.treeY - ((this.treeW * 580) / 420) / 2 + (32 / 580) * ((this.treeW * 580) / 420);
+    this.P = P;
+    const place = (b, key, hit) => {
+      const p = P[key];
+      const r = R[key];
+      b.x = p.x;
+      b.y = p.y;
+      b.spriteW = wOf(r) * p.k;
+      b.w = (hit ? hit[0] : wOf(r)) * p.k;
+      b.h = (hit ? hit[1] : hOf(r)) * p.k;
+      b.hitR = 0;
+    };
+    place(this.play, 'play', [504, 150]);
+    place(this.btnAch, 'ach', [150, 140]);
+    place(this.btnRate, 'rate', [150, 140]);
+    place(this.btnGifts, 'gifts', [150, 140]);
+    place(this.btnSettings, 'settings');
+    this.btnSettings.hitR = 56 * P.settings.k;
+    place(this.btnPlus, 'plus');
+    this.btnPlus.hitR = 40 * P.plus.k;
+    const bk = P.ach.k;
+    for (const b of [this.btnAch, this.btnGifts]) { b.badgeAt = [52 * bk, -50 * bk]; b.badgeR = 20 * bk; }
   }
 
   onResize() { this.layout(); }
-  moonPos() { return this.moon; }
 
-  treePt(p) {
-    const k = this.treeW / 420;
-    const h = (this.treeW * 580) / 420;
-    return [this.treeX + (p.x - 210) * k, this.treeY - h / 2 + p.y * k];
+  // конец зелёной полоски прогресса (для искр)
+  barEnd() {
+    const p = this.P.progress;
+    const r = R.progress;
+    const bar = meta('panel_progress').bar;
+    const k = p.k;
+    const x0 = p.x + (bar[0] - cxOf(r)) * k;
+    const w = (bar[2] - bar[0]) * k;
+    return [x0 + w * (this.decorShown / MAX_DECOR), p.y + ((bar[1] + bar[3]) / 2 - cyOf(r)) * k];
   }
 
   pointerDown(x, y) {
@@ -176,148 +266,157 @@ export class MenuScene {
   update(dt) {
     this.t += dt;
     this.particles.update(dt);
-    this.btnGift.badge = dailyAvailable() ? '!' : null;
-    this.play.sub = `Уровень ${SAVE.data.level}`;
+    this.btnGifts.badge = dailyAvailable() ? '!' : null;
+    this.btnAch.badge = achClaimable() ? '!' : null;
     this.coinsShown += (SAVE.data.coins - this.coinsShown) * Math.min(1, dt * 6);
-    this.blink -= dt;
-    if (this.blink < -3.2) this.blink = 0.14;
   }
 
-  drawTitle(ctx, time) {
-    const word = 'СТРЕЛКИ';
-    const cols = ['red', 'gold', 'green', 'blue', 'pink', 'orange', 'purple'];
-    const size = 108;
-    ctx.font = `900 ${size}px Nunito, Arial`;
-    const widths = [...word].map((ch) => ctx.measureText(ch).width);
-    const total = widths.reduce((a, b) => a + b, 0) + (word.length - 1) * 2;
-    const maxW = Math.min(this.app.view.DW - 40, 660);
-    const k = Math.min(1, maxW / total);
-    let x = this.titleX - (total * k) / 2;
+  // тёмная копия ёлки с круглыми окошками над зажжёнными игрушками
+  drawTree(ctx) {
+    if (this.darkA <= 0.001) return;
+    const m = this.map;
+    const r = this.treeRect;
+    const { s, dpr } = this.app.view;
+    const pw = Math.max(1, Math.round((r[2] - r[0]) * m.k * s * dpr));
+    const ph = Math.max(1, Math.round((r[3] - r[1]) * m.k * s * dpr));
+    const animating = this.flashes.length || this.lit.some((v) => v > 0 && v < 1) || (this.starK > 0 && this.starK < 1);
+    if (!this.treeCanvas || this.treeCanvas.width !== pw || this.treeCanvas.height !== ph) {
+      this.treeCanvas = this.treeCanvas || document.createElement('canvas');
+      this.treeCanvas.width = pw;
+      this.treeCanvas.height = ph;
+      this.treeDirty = true;
+    }
+    if (this.treeDirty || animating) {
+      const c = this.treeCanvas.getContext('2d');
+      const kk = pw / (r[2] - r[0]);
+      c.globalCompositeOperation = 'source-over';
+      c.clearRect(0, 0, pw, ph);
+      drawAt(c, 'tree_dark', 0, 0, kk);
+      c.globalCompositeOperation = 'destination-out';
+      const hole = (x, y, R, f) => {
+        if (f <= 0.01) return;
+        const X = (x - r[0]) * kk, Y = (y - r[1]) * kk, RR = R * kk * Math.max(0.01, f);
+        const g = c.createRadialGradient(X, Y, 0, X, Y, RR);
+        g.addColorStop(0, 'rgba(0,0,0,1)');
+        g.addColorStop(0.62, 'rgba(0,0,0,1)');
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        c.fillStyle = g;
+        c.beginPath(); c.arc(X, Y, RR, 0, Math.PI * 2); c.fill();
+      };
+      this.wins.forEach((w, i) => hole(w[0], w[1], w[2] * 1.55, this.lit[i]));
+      hole(this.starWin[0], this.starWin[1], this.starWin[2] * 1.45, this.starK);
+      c.globalCompositeOperation = 'source-over';
+      this.treeDirty = false;
+    }
     ctx.save();
-    ctx.translate(0, this.titleY);
-    ctx.scale(k, k);
-    x /= k;
-    [...word].forEach((ch, i) => {
-      const w = widths[i];
-      const y = Math.sin(time * 2.4 + i * 0.7) * 6;
-      const rot = Math.sin(time * 1.7 + i) * 0.04;
-      ctx.save();
-      ctx.translate(x + w / 2, y);
-      ctx.rotate(rot);
-      const P = PAL[cols[i % cols.length]];
-      text(ctx, ch, 0, 0, size, { stroke: '#ffffff', sw: 26, shadow: false });
-      text(ctx, ch, 0, 0, size, { stroke: P.dark, sw: 12, gradient: [P.light, P.base, P.mid] });
-      // снежок на букве
-      if (i % 2 === 0) {
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.ellipse(-w * 0.05, -size * 0.36, w * 0.3, size * 0.07, 0, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.restore();
-      x += w + 2;
-    });
+    ctx.globalAlpha = this.darkA;
+    ctx.drawImage(this.treeCanvas, m.ox + r[0] * m.k, m.oy + r[1] * m.k, (r[2] - r[0]) * m.k, (r[3] - r[1]) * m.k);
     ctx.restore();
-    drawRibbon(ctx, this.titleX, this.titleY + 96, Math.min(440, this.app.view.DW - 140), 66, 'red');
-    text(ctx, 'новогодняя сортировка', this.titleX, this.titleY + 92, 32, { stroke: '#4a0710', maxW: Math.min(390, this.app.view.DW - 190) });
   }
 
-  draw(ctx, time) {
-    // ёлка
-    const h = (this.treeW * 580) / 420;
-    const glow = ctx.createRadialGradient(this.treeX, this.treeY, 10, this.treeX, this.treeY, this.treeW * 0.8);
-    glow.addColorStop(0, 'rgba(255,230,150,.22)');
-    glow.addColorStop(1, 'rgba(255,230,150,0)');
-    ctx.fillStyle = glow;
-    ctx.fillRect(this.treeX - this.treeW, this.treeY - h * 0.7, this.treeW * 2, h * 1.4);
-    drawSprite(ctx, 'tree', this.treeX, this.treeY, this.treeW);
-    this.drawLights(ctx, time);
-    const k = this.treeW / 420;
-    POINTS.forEach((p, i) => {
-      const a = this.decorK[i];
-      if (a <= 0) return;
-      const [x, y] = this.treePt(p);
-      const sway = Math.sin(time * 2 + i) * 0.08;
-      const fy = y - (1 - Math.min(1, a)) * 120;
-      const size = (p.kind === 'candy' ? 30 : p.kind === 'bell' ? 40 : 44) * k * Math.max(0.01, a);
-      drawSprite(ctx, p.kind, x, fy, size, { rot: sway, ay: 0.15 });
-    });
-    if (this.starK > 0) {
-      const s = this.starK;
-      drawSprite(ctx, 'startop', this.treeX, this.treeTop - 8 * k, 120 * k * s * (1 + Math.sin(time * 3) * 0.04), { rot: Math.sin(time * 1.5) * 0.05 });
+  // вспышки при зажигании
+  drawFlashes(ctx, dt) {
+    if (!this.flashes.length) return;
+    const m = this.map;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const f of this.flashes) {
+      f.t += dt;
+      if (f.t < 0) continue;
+      const a = Math.max(0, 1 - f.t / 0.7);
+      const x = m.ox + f.x * m.k, y = m.oy + f.y * m.k;
+      const R = f.r * m.k * (1.4 + f.t * 2.2);
+      const g = ctx.createRadialGradient(x, y, 0, x, y, R);
+      g.addColorStop(0, `rgba(255,250,220,${0.95 * a})`);
+      g.addColorStop(0.35, `rgba(255,214,120,${0.55 * a})`);
+      g.addColorStop(1, 'rgba(255,190,80,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
     }
-    // прогресс украшения
-    const done = Math.round(this.decorK.reduce((a, b) => a + (b > 0.5 ? 1 : 0), 0));
-    const py = this.treeY + h / 2 + 6;
-    ctx.fillStyle = 'rgba(8,22,58,.62)';
-    rr(ctx, this.treeX - 130, py - 22, 260, 44, 22);
-    ctx.fill();
-    text(ctx, `Украшено: ${done}/${MAX_DECOR}`, this.treeX, py + 1, 26, { stroke: null, weight: 800 });
-    // снеговик с морганием
-    const [sx, sy, sw] = this.snowman;
-    const bob = Math.sin(time * 2.2) * 0.025;
-    drawSprite(ctx, 'snowman_noeyes', sx, sy, sw, { sy: 1 + bob, sx: 1 - bob * 0.5, ay: 0.9 });
-    const sk = sw / 220;
-    const sh = (290 * sk);
-    const top = sy - sh * 0.9 * (1 + bob);
-    const eyeY = top + 68 * sk * (1 + bob);
-    const blinkK = this.blink > 0 ? 0.15 : 1;
-    ctx.fillStyle = '#1d2433';
-    for (const ex of [98, 124]) {
-      ctx.beginPath();
-      ctx.ellipse(sx + (ex - 110) * sk, eyeY, 5 * sk, 6 * sk * blinkK, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    if (blinkK === 1) {
-      ctx.fillStyle = '#fff';
-      for (const ex of [96.5, 122.5]) { ctx.beginPath(); ctx.arc(sx + (ex - 110) * sk, eyeY - 2 * sk, 1.8 * sk, 0, Math.PI * 2); ctx.fill(); }
-    }
-    this.drawTitle(ctx, time);
-    // монеты
-    const [mx, my] = this.coinsPos;
-    ctx.fillStyle = 'rgba(8,22,58,.6)';
-    rr(ctx, mx - 86, my - 28, 176, 56, 28);
-    ctx.fill();
-    drawSprite(ctx, 'coin', mx - 62, my, 58);
-    text(ctx, String(Math.round(this.coinsShown)), mx + 14, my + 1, 32, { stroke: '#0d2350' });
-    for (const b of this.buttons) b.draw(ctx, time);
-    this.particles.draw(ctx);
+    ctx.restore();
+    this.flashes = this.flashes.filter((f) => f.t < 0.7);
   }
 
   drawLights(ctx, time) {
-    const k = this.treeW / 420;
-    const h = (this.treeW * 580) / 420;
-    const ox = this.treeX - 210 * k, oy = this.treeY - h / 2;
-    const swags = [[[95, 250], [325, 300]], [[70, 350], [345, 400]], [[60, 445], [370, 455]], [[140, 165], [290, 200]]];
-    const cols = ['#ff4a5a', '#ffd23a', '#3aa0ff', '#38d06a', '#ff7ad1'];
-    let n = 0;
-    for (const [[x1, y1], [x2, y2]] of swags) {
-      const cx = (x1 + x2) / 2, cy = Math.max(y1, y2) + 34;
-      ctx.strokeStyle = 'rgba(30,50,30,.7)';
-      ctx.lineWidth = 2.5 * k;
-      ctx.beginPath();
-      ctx.moveTo(ox + x1 * k, oy + y1 * k);
-      ctx.quadraticCurveTo(ox + cx * k, oy + cy * k, ox + x2 * k, oy + y2 * k);
-      ctx.stroke();
-      for (let i = 1; i < 9; i++) {
-        const t = i / 9, u = 1 - t;
-        const x = u * u * x1 + 2 * u * t * cx + t * t * x2;
-        const y = u * u * y1 + 2 * u * t * cy + t * t * y2;
-        const on = 0.5 + 0.5 * Math.sin(time * 3.2 + n * 1.1);
-        const c = cols[n % cols.length];
-        const X = ox + x * k, Y = oy + y * k + 5 * k;
-        const g = ctx.createRadialGradient(X, Y, 1, X, Y, 15 * k);
-        g.addColorStop(0, c);
-        g.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.globalAlpha = 0.6 * on;
-        ctx.fillStyle = g;
-        ctx.beginPath(); ctx.arc(X, Y, 15 * k, 0, Math.PI * 2); ctx.fill();
-        ctx.globalAlpha = 0.7 + 0.3 * on;
-        ctx.fillStyle = c;
-        ctx.beginPath(); ctx.ellipse(X, Y, 4 * k, 5.5 * k, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.globalAlpha = 1;
-        n++;
-      }
+    const m = this.map;
+    if (!m || !this.lights.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const all = 1 - this.darkA;
+    for (const l of this.lights) {
+      // гирлянда горит только возле зажжённых игрушек (или вся, когда ёлка зажжена целиком)
+      const on = Math.max(all, l.near >= 0 ? Math.min(1, this.lit[l.near]) : 0, l.inStar ? this.starK : 0);
+      if (on <= 0.02) continue;
+      const a = (0.5 + 0.5 * Math.sin(time * l.sp + l.ph)) * on;
+      if (a < 0.15) continue;
+      const x = m.ox + l.x * m.k, y = m.oy + l.y * m.k;
+      const r = (l.r * 2.6 + 6) * m.k;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, `rgba(255,236,170,${0.55 * a})`);
+      g.addColorStop(0.4, `rgba(255,200,90,${0.22 * a})`);
+      g.addColorStop(1, 'rgba(255,180,60,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(x - r, y - r, r * 2, r * 2);
     }
+    ctx.restore();
+  }
+
+  drawProgress(ctx) {
+    const p = this.P.progress;
+    const r = R.progress;
+    const k = p.k;
+    const x0 = p.x - (wOf(r) * k) / 2, y0 = p.y - (hOf(r) * k) / 2;
+    drawAt(ctx, 'panel_progress', x0, y0, k);
+    const M = meta('panel_progress');
+    const [bx0, by0, bx1, by1] = M.bar;
+    const X = x0 + (bx0 - r[0]) * k, Y = y0 + (by0 - r[1]) * k;
+    const BW = (bx1 - bx0) * k, BH = (by1 - by0) * k;
+    const f = clamp(this.decorShown / MAX_DECOR, 0, 1);
+    if (f > 0) {
+      const fw = Math.max(BH, BW * f);
+      ctx.save();
+      const g = ctx.createLinearGradient(0, Y, 0, Y + BH);
+      g.addColorStop(0, '#c4f760');
+      g.addColorStop(0.45, '#7fd52a');
+      g.addColorStop(1, '#3a9a10');
+      ctx.fillStyle = '#2a6e0c';
+      rr(ctx, X, Y, fw, BH, BH / 2);
+      ctx.fill();
+      ctx.fillStyle = g;
+      rr(ctx, X + 1.5 * k, Y + 1.5 * k, fw - 3 * k, BH - 3 * k, BH / 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.4)';
+      rr(ctx, X + BH * 0.35, Y + BH * 0.16, Math.max(0, fw - BH * 0.7), BH * 0.26, BH * 0.13);
+      ctx.fill();
+      ctx.restore();
+    }
+    const [tx, ty] = M.text;
+    const shown = Math.round(this.decorShown);
+    text(ctx, `Зажжено: ${shown}/${MAX_DECOR}`, x0 + (tx - r[0]) * k, y0 + (ty - r[1]) * k, 36 * k, { stroke: null, color: '#5a2208', weight: 900, maxW: 270 * k });
+  }
+
+  drawCoins(ctx) {
+    const P = this.P;
+    drawCounterPill(ctx, P.pill.x, P.pill.y, P.pill.w, P.pill.h);
+    drawSprite(ctx, 'coin', P.coin.x, P.coin.y, P.coin.w);
+    const tx = P.pill.x + P.coin.w * 0.42 + (P.pill.w - P.coin.w * 0.42) / 2 - P.pill.h * 0.3;
+    text(ctx, String(Math.round(this.coinsShown)), tx, P.pill.y + P.pill.h / 2 + 1, P.pill.h * 0.72, { stroke: '#0a1840', sw: P.pill.h * 0.12, maxW: P.pill.w * 0.5 });
+  }
+
+  draw(ctx, time) {
+    const dt = Math.max(0, Math.min(0.05, time - (this.lastT || time)));
+    this.lastT = time;
+    this.drawTree(ctx);
+    this.drawLights(ctx, time);
+    this.drawFlashes(ctx, dt);
+    const P = this.P;
+    // логотип чуть «дышит»
+    const lp = P.logo;
+    const bob = Math.sin(time * 1.6) * 3 * lp.k;
+    drawSprite(ctx, 'logo', lp.x, lp.y + bob, wOf(R.logo) * lp.k);
+    this.drawProgress(ctx);
+    this.drawCoins(ctx);
+    for (const b of this.buttons) b.draw(ctx, time);
+    this.particles.draw(ctx);
   }
 }

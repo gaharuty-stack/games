@@ -1,20 +1,38 @@
 // Игровая сцена: поле стрелок, подарочные коробки, полка ожидания, бонусы.
-import { drawSprite, buildShelf, ART } from './art.js';
+// Оформление — как на референсе «новое оформление игры»: деревянная рамка с гирляндой,
+// табличка «Уровень N», подарки в деревянных ячейках, табличка «далее», доска с бонусами.
+import { drawSprite, drawAt, drawNine, drawThree, meta } from './art.js';
 import { decodeLevel, remixLevel, DIRS, firstBlocker, rayClear, BOX_SIZE } from './level.js';
 import { LEVELS } from './levels-data.js';
 import { Particles } from './particles.js';
 import { Ease, lerp, clamp } from './tween.js';
-import { Button, text, rr, drawRibbon, drawSnowCap } from './ui.js';
+import { Button, text, rr, drawSign, drawSnowCap, drawCounterPill } from './ui.js';
 import { SAVE, persist } from './save.js';
+import { stageOf, coverMap } from './bg.js';
 import { WinPopup, FailPopup, PausePopup, BoosterPopup } from './popups.js';
 
 const ANG = [-Math.PI / 2, 0, Math.PI / 2, Math.PI];
-const ITEM_OFF = [-31, 0, 31];
+const ITEM_OFF = [-54, 0, 54]; // смещения стрелок в коробке (пиксели референса)
 const MAX_SLOTS = 7;
-const LID_REST = -37;
-const BOW_REST = -66;
-const BS = 1.16; // общий масштаб коробок
-const CAP = 0.42; // высота полосы под снег и гирлянду над полем, в клетках
+
+// ---- геометрия элементов на референсе (пиксели картинки 1672×941) ----
+const FRAME = [205, 82, 1080, 928];
+const INTERIOR = [289, 192, 990, 866];
+const SIGN_TEXT = [576, 76];
+const SETTINGS = [128, 10, 254, 134];
+const COIN_PILL = [1340, 36, 1566, 110];
+const COIN = [1363, 73, 91];
+const HEARTS = [[1142, 175], [1200, 175], [1258, 175]];
+const HEART_W = 61;
+const GIFT_PILL = [1340, 130, 1566, 202];
+const GIFT = [1368, 166, 84];
+const SHELF = [1078, 248, 1552, 526];
+const BOX_RECT = [[1108, 262, 1297, 442], [1331, 262, 1521, 442]]; // спрайт коробки 189×180
+const BOX_W = 189, BOX_H = 180, BOX_BODY_TOP = 48; // верх «тела» коробки в спрайте
+const SLOTS = [[1348, 489], [1417, 489]];
+const BOOST = [1074, 712, 1598, 914];
+const BOOST_BTN = [[1158, 806, 67], [1339, 804, 67], [1503, 803, 64]];
+const WAIT = { cx: 1336, top: 664, pitch: 66, arrow: 64 }; // полка ожидания (её нет на референсе — между «далее» и бонусами)
 
 export function getLevel(n) {
   if (n <= LEVELS.length) return decodeLevel(LEVELS[n - 1], n);
@@ -65,6 +83,7 @@ export class GameScene {
     this.tipA = 0;
     this.tapsDone = 0;
     this.splash = this.lv.hard ? { t: 0 } : null;
+    this.bulbs = (meta('frame').bulbs || []).map((b, i) => ({ x: b[0], y: b[1], r: b[2], c: b[3], ph: (i * 1.7) % 6.28 }));
     this.makeButtons();
     this.layout();
     for (let i = 0; i < 2; i++) this.slots[i].box = this.spawnBox(i, null, 0.25 + i * 0.12);
@@ -80,136 +99,141 @@ export class GameScene {
 
   // ---------- раскладка ----------
   makeButtons() {
-    const app = this.app;
-    this.btnPause = new Button({ round: true, w: 84, style: 'blue', icon: 'i_gear', iconW: 50, onClick: () => this.openPause() });
-    const mk = (key, icon, style) => new Button({ round: true, w: 108, style, icon, iconW: 78, onClick: () => this.useBooster(key) });
-    this.btnHint = mk('hint', 'wand', 'purple');
-    this.btnMagnet = mk('magnet', 'magnet', 'blue');
-    this.btnSnow = mk('snowball', 'snowball', 'blue');
+    this.btnPause = new Button({ sprite: 'btn_set_blue', onClick: () => this.openPause() });
+    const mk = (key, sprite) => new Button({ sprite, onClick: () => this.useBooster(key) });
+    this.btnHint = mk('hint', 'btn_wand');
+    this.btnMagnet = mk('magnet', 'btn_magnet');
+    this.btnSnow = mk('snowball', 'btn_snowball');
     this.buttons = [this.btnPause, this.btnHint, this.btnMagnet, this.btnSnow];
     this.boosterBtns = { hint: this.btnHint, magnet: this.btnMagnet, snowball: this.btnSnow };
-      }
+  }
 
   layout() {
-    const { DW: W, DH: H, landscape } = this.app.view;
+    const view = this.app.view;
+    const { DW: W, DH: H, landscape } = view;
     const { w, h } = this.lv;
-    const L = {};
-    if (!landscape) {
-      const col = Math.min(720, W);
-      const left = W / 2 - col / 2;
-      L.cx = W / 2;
-      L.pause = [left + 60, 62];
-      L.coins = [left + col - 112, 62];
-      L.ribbon = [W / 2 - 18, 58, 236];
-      L.heartsY = 142;
-      L.heartsX = W / 2 - 128;
-      L.counter = [W / 2 + 116, 142];
-      L.box = [[W / 2 - 100, 276], [W / 2 + 100, 276]];
-      L.preview = [W / 2 + 232, 272];
-      L.boosterY = H - 92;
-      L.boosters = [[W / 2 - 150, H - 92], [W / 2, H - 92], [W / 2 + 150, H - 92]];
-      L.shelfY = H - 238;
-      L.shelfCX = W / 2;
-      L.shelfMaxW = col - 40;
-      // сверху поля — полоса под снежную шапку и гирлянду, чтобы они не закрывали первый ряд
-      const top = 396, bottom = H - 340;
-      L.cell = Math.min((col - 44) / w, (bottom - top) / (h + CAP), 98);
-      L.cap = L.cell * CAP;
-      L.bx = W / 2 - (w * L.cell) / 2;
-      L.by = top + L.cap + (bottom - top - L.cap - h * L.cell) / 2;
-      L.moon = [left + 84, 196];
+    const L = { landscape };
+    if (landscape) {
+      // всё — на своих местах, как на референсе
+      const st = stageOf(view);
+      const k = st.k;
+      const X = (x) => st.ox + x * k, Y = (y) => st.oy + y * k;
+      L.k = k;
+      L.frame = { x: X(FRAME[0]), y: Y(FRAME[1]), w: (FRAME[2] - FRAME[0]) * k, h: (FRAME[3] - FRAME[1]) * k, bs: k };
+      L.sign = { x: X(SIGN_TEXT[0]), y: Y(SIGN_TEXT[1]), k };
+      L.pause = { x: X((SETTINGS[0] + SETTINGS[2]) / 2), y: Y((SETTINGS[1] + SETTINGS[3]) / 2), k };
+      L.coinPill = { x: X(COIN_PILL[0]), y: Y(COIN_PILL[1]), w: (COIN_PILL[2] - COIN_PILL[0]) * k, h: (COIN_PILL[3] - COIN_PILL[1]) * k };
+      L.coin = { x: X(COIN[0]), y: Y(COIN[1]), w: COIN[2] * k };
+      L.hearts = HEARTS.map(([x, y]) => [X(x), Y(y)]);
+      L.heartW = HEART_W * k;
+      L.giftPill = { x: X(GIFT_PILL[0]), y: Y(GIFT_PILL[1]), w: (GIFT_PILL[2] - GIFT_PILL[0]) * k, h: (GIFT_PILL[3] - GIFT_PILL[1]) * k };
+      L.gift = { x: X(GIFT[0]), y: Y(GIFT[1]), w: GIFT[2] * k };
+      L.shelfBox = { x: X(SHELF[0]), y: Y(SHELF[1]), k };
+      L.bk = k;
+      L.box = BOX_RECT.map((r) => [X((r[0] + r[2]) / 2), Y((r[1] + r[3]) / 2)]);
+      L.slotsPrev = SLOTS.map(([x, y]) => [X(x), Y(y)]);
+      L.boost = { x: X(BOOST[0]), y: Y(BOOST[1]), k };
+      L.boostBtns = BOOST_BTN.map(([x, y, r]) => [X(x), Y(y), r * k]);
+      L.wait = { cx: X(WAIT.cx), top: Y(WAIT.top), pitch: WAIT.pitch * k, arrow: WAIT.arrow * k, maxW: 470 * k };
+      this.app.setBg('game', st);
     } else {
-      const px = W - 250;
-      L.cx = px;
-      L.pause = [58, 56];
-      L.coins = [W - 118, 56];
-      const boardW = W - 520;
-      const bcx = 30 + boardW / 2;
-      L.ribbon = [bcx, 54, 290];
-      L.heartsY = 136;
-      L.heartsX = px - 160;
-      L.counter = [px + 120, 136];
-      L.box = [[px - 100, 270], [px + 100, 270]];
-      // очередь коробок — строкой под коробками: справа от них она упиралась в край экрана
-      L.preview = [px, 376];
-      L.previewRow = true;
-      L.boosters = [[px - 135, H - 90], [px, H - 90], [px + 135, H - 90]];
-      L.shelfY = H - 255;
-      L.shelfCX = px;
-      L.shelfMaxW = 470;
-      const top = 146, bottom = H - 24;
-      L.cell = Math.min((boardW - 20) / w, (bottom - top) / (h + CAP), 100);
-      L.cap = L.cell * CAP;
-      L.bx = bcx - (w * L.cell) / 2;
-      L.by = top + L.cap + (bottom - top - L.cap - h * L.cell) / 2;
-      L.moon = [px - 150, 60];
+      // портрет: сверху HUD, ниже подарки, поле, полка ожидания и бонусы
+      const col = Math.min(720, W);
+      const left = W / 2 - col / 2, right = left + col;
+      const topY = 62;
+      L.k = 0.8;
+      L.pause = { x: left + 58, y: topY, k: 98 / (SETTINGS[2] - SETTINGS[0]) };
+      L.coinPill = { x: right - 14 - 172, y: topY - 27, w: 172, h: 54 };
+      L.coin = { x: L.coinPill.x + 22, y: topY, w: 66 };
+      const sk = Math.min(0.6, (col - 300) / 698);
+      L.sign = { x: left + 112 + (col - 112 - 190) / 2, y: topY + 2, k: sk };
+      const hy = 148;
+      L.heartW = 52;
+      L.hearts = [0, 1, 2].map((i) => [left + 52 + i * 56, hy]);
+      L.giftPill = { x: right - 14 - 172, y: hy - 26, w: 172, h: 52 };
+      L.gift = { x: L.giftPill.x + 24, y: hy - 1, w: 64 };
+      // подарки в ячейках
+      const bk = clamp(0.7 + ((H - 1180) / 380) * 0.2, 0.7, 0.9) * Math.min(1, col / 600);
+      const shelfW = (SHELF[2] - SHELF[0]) * bk;
+      const shelfY = 178;
+      L.shelfBox = { x: W / 2 - shelfW / 2, y: shelfY, k: bk };
+      L.bk = bk;
+      const SX = (x) => L.shelfBox.x + (x - SHELF[0]) * bk, SY = (y) => shelfY + (y - SHELF[1]) * bk;
+      L.box = BOX_RECT.map((r) => [SX((r[0] + r[2]) / 2), SY((r[1] + r[3]) / 2)]);
+      L.slotsPrev = SLOTS.map(([x, y]) => [SX(x), SY(y)]);
+      // бонусы внизу
+      const bbk = Math.min(0.84, (col - 24) / (BOOST[2] - BOOST[0]));
+      const bH = (BOOST[3] - BOOST[1]) * bbk;
+      const bx0 = W / 2 - ((BOOST[2] - BOOST[0]) * bbk) / 2, by0 = H - bH - 2;
+      L.boost = { x: bx0, y: by0, k: bbk };
+      L.boostBtns = BOOST_BTN.map(([x, y, r]) => [bx0 + (x - BOOST[0]) * bbk, by0 + (y - BOOST[1]) * bbk, r * bbk]);
+      // полка ожидания — над доской с бонусами (выше снежных шапок кнопок)
+      const wk = 0.86;
+      L.wait = { cx: W / 2, top: by0 - 30, pitch: 66 * wk, arrow: 64 * wk, maxW: col - 40 };
+      // поле: рамка занимает всё место между подарками и полкой, поле — по центру рамки
+      const fTop = shelfY + (SHELF[3] - SHELF[1]) * bk + 2;
+      const fBot = L.wait.top - L.wait.arrow - 6;
+      const fw = Math.min(col - 6, 760);
+      L.frame = { x: W / 2 - fw / 2, y: fTop, w: fw, h: fBot - fTop, bs: 0.6 };
+      this.app.setBg('game', coverMap(view, 1330, 470));
     }
-    L.pad = L.cell * 0.26;
+    // внутренность рамки (поле)
+    const F = L.frame, bs = F.bs;
+    const ix = F.x + (INTERIOR[0] - FRAME[0]) * bs;
+    const iy = F.y + (INTERIOR[1] - FRAME[1]) * bs;
+    const iw = F.w - (INTERIOR[0] - FRAME[0] + FRAME[2] - INTERIOR[2]) * bs;
+    const ih = F.h - (INTERIOR[1] - FRAME[1] + FRAME[3] - INTERIOR[3]) * bs;
+    L.inner = { x: ix, y: iy, w: iw, h: ih };
+    // обучение: место под подсказку внизу поля
+    const tipLines = this.tipText ? this.tipText.split('\n').length : 0;
+    L.tipH = tipLines ? (tipLines * 34 + 34) : 0;
+    const pad = 8;
+    const availH = ih - pad * 2 - (L.tipH ? L.tipH + 8 : 0);
+    L.cell = Math.min((iw - pad * 2) / w, availH / h, landscape ? 112 * L.k : 104);
+    L.bx = ix + iw / 2 - (w * L.cell) / 2;
+    L.by = iy + pad + (availH - h * L.cell) / 2;
+    L.pad = L.cell * 0.2;
     this.L = L;
-    this.btnPause.x = L.pause[0]; this.btnPause.y = L.pause[1];
-    [this.btnHint, this.btnMagnet, this.btnSnow].forEach((b, i) => { b.x = L.boosters[i][0]; b.y = L.boosters[i][1]; });
+    // кнопки
+    const p = L.pause;
+    this.btnPause.x = p.x; this.btnPause.y = p.y;
+    this.btnPause.spriteW = (SETTINGS[2] - SETTINGS[0]) * p.k;
+    this.btnPause.hitR = 56 * p.k;
+    [this.btnHint, this.btnMagnet, this.btnSnow].forEach((b, i) => {
+      const [x, y, r] = L.boostBtns[i];
+      const kk = r / BOOST_BTN[i][2];
+      b.x = x; b.y = y;
+      b.spriteW = (BOOST_BTN[i][2] * 2 + 20) * kk;
+      b.spriteDY = -7 * kk;
+      b.hitR = r + 4;
+      b.badgeAt = [56 * kk, -56 * kk];
+      b.badgeR = 24 * kk;
+    });
     this.layoutShelf();
-    this.buildBoard();
   }
 
   layoutShelf() {
     const L = this.L;
     const slots = Math.min(MAX_SLOTS, this.shelfCap + (this.lockedSlot ? 1 : 0));
     L.slots = slots;
-    L.slotSp = Math.min(92, (L.shelfMaxW - 40) / slots);
-    L.shelfW = slots * L.slotSp + 44;
-    L.shelfArrow = Math.min(74, L.slotSp * 0.86);
-    buildShelf(Math.round(L.shelfW), this.app.artScale);
+    const W8 = L.wait;
+    L.slotSp = Math.min(W8.pitch, (W8.maxW - 30) / slots);
+    L.shelfW = slots * L.slotSp + 34 * (W8.pitch / 66);
+    L.shelfArrow = Math.min(W8.arrow, L.slotSp * 0.96);
   }
 
   onResize() { this.layout(); }
-  onArtRebuilt() { this.layoutShelf(); this.buildBoard(); }
-  moonPos() { return this.L.moon; }
+  onArtRebuilt() {}
 
   slotPos(i) {
     const L = this.L;
-    const x = L.shelfCX - ((L.slots - 1) / 2) * L.slotSp + i * L.slotSp;
-    return { x, y: L.shelfY - 9 - L.shelfArrow * 0.36, nestY: L.shelfY - 9 };
+    const x = L.wait.cx - ((L.slots - 1) / 2) * L.slotSp + i * L.slotSp;
+    return { x, y: L.wait.top - L.shelfArrow * 0.42, nestY: L.wait.top };
   }
 
   cellCenter(x, y) {
     const L = this.L;
     return [L.bx + (x + 0.5) * L.cell, L.by + (y + 0.5) * L.cell];
-  }
-
-  buildBoard() {
-    const { w, h, mask } = this.lv;
-    const L = this.L;
-    const sc = this.app.artScale;
-    const pad = L.pad;
-    const cap = L.cap;
-    const bw = w * L.cell + pad * 2, bh = h * L.cell + pad * 2 + cap;
-    const c = document.createElement('canvas');
-    c.width = Math.ceil(bw * sc);
-    c.height = Math.ceil(bh * sc);
-    const ctx = c.getContext('2d');
-    ctx.scale(sc, sc);
-    // подложка почти непрозрачная: сквозь неё не должны просвечивать домики и ёлки фона
-    const g = ctx.createLinearGradient(0, 0, 0, bh);
-    g.addColorStop(0, 'rgba(20,48,110,.97)');
-    g.addColorStop(1, 'rgba(10,26,66,.98)');
-    ctx.fillStyle = g;
-    rr(ctx, 2, 2, bw - 4, bh - 4, Math.min(48, L.cell * 0.5));
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(160,210,255,.4)';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,255,255,.12)';
-    ctx.lineWidth = 2;
-    rr(ctx, 7, 7, bw - 14, bh - 14, Math.min(42, L.cell * 0.45));
-    ctx.stroke();
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (!mask[y * w + x]) continue;
-        drawSprite(ctx, 'socket', pad + (x + 0.5) * L.cell, pad + cap + (y + 0.5) * L.cell, L.cell);
-      }
-    }
-    this.boardImg = { canvas: c, x: L.bx - pad, y: L.by - pad - cap, w: bw, h: bh };
   }
 
   // ---------- логика коробок и полки ----------
@@ -218,7 +242,7 @@ export class GameScene {
     const p = this.L.box[slot];
     const b = {
       color: this.lv.queue[this.qi++], slot, count: 0, landed: 0, items: [], state: 'wait', waitFor, delay,
-      scale: 0, x: p[0], y: p[1], lidY: -170, lidA: 0, bowS: 0, open: false, squash: 0, rot: 0, alpha: 1,
+      scale: 0, x: p[0], y: p[1], bowS: 0, open: false, squash: 0, rot: 0, alpha: 1,
     };
     this.boxes.push(b);
     return b;
@@ -290,8 +314,8 @@ export class GameScene {
   destPos(a) {
     if (a.dest.type === 'box') {
       const p = this.boxPos(a.dest.box);
-      const k = p.s * BS;
-      return { x: p.x + ITEM_OFF[a.dest.idx] * k, y: p.y - 24 * k, size: 56 * k };
+      const k = p.s * this.L.bk;
+      return { x: p.x + ITEM_OFF[a.dest.idx] * k, y: p.y + (BOX_BODY_TOP - BOX_H / 2 - 10) * k, size: 70 * k };
     }
     const s = this.slotPos(a.dest.i);
     return { x: s.x, y: s.y, size: this.L.shelfArrow };
@@ -304,7 +328,7 @@ export class GameScene {
     // замок на полке
     if (this.lockedSlot) {
       const p = this.slotPos(this.shelfCap);
-      if (Math.hypot(x - p.x, y - p.nestY + 20) < this.L.slotSp * 0.55) { this.unlockSlot(); return; }
+      if (Math.hypot(x - p.x, y - (p.nestY - this.L.slotSp * 0.4)) < this.L.slotSp * 0.62) { this.unlockSlot(); return; }
     }
     const L = this.L;
     const cx = Math.floor((x - L.bx) / L.cell), cy = Math.floor((y - L.by) / L.cell);
@@ -397,24 +421,23 @@ export class GameScene {
     b.open = false;
     const tw = this.app.tw;
     this.app.sfx('boxDone');
-    b.lidY = LID_REST - 90;
-    b.lidA = 0;
-    tw.to(b, { lidA: 1 }, 0.08);
-    await tw.to(b, { lidY: LID_REST }, 0.2, Ease.outBounce);
+    // бант «завязывается» сверху
     b.squash = 1;
-    tw.to(b, { bowS: 1 }, 0.26, Ease.outBack);
-    this.particles.sparkles(b.x, b.y - 50, 14, 300, 40);
-    await tw.wait(0.12);
-    // коробка улетает, а на её место сразу выскакивает следующая
+    await tw.to(b, { bowS: 1 }, 0.3, Ease.outBack);
+    const k = this.L.bk;
+    this.particles.sparkles(b.x, b.y - 60 * k, 14, 300, 40);
+    await tw.wait(0.14);
+    // коробка улетает к счётчику, а на её место сразу выскакивает следующая
     b.state = 'leave';
     const L = this.L;
     tw.to(b, { rot: -0.35 }, 0.45, Ease.inQuad);
-    await tw.to(b, { x: L.counter[0] - 46, y: L.counter[1], scale: 0.22, alpha: 0.6 }, 0.42, Ease.inBack);
+    await tw.to(b, { x: L.gift.x, y: L.gift.y, scale: 0.28, alpha: 0.6 }, 0.42, Ease.inBack);
     b.state = 'gone';
     this.boxes = this.boxes.filter((q) => q !== b);
     this.boxesDone++;
+    SAVE.data.stats.boxes = (SAVE.data.stats.boxes || 0) + 1;
     this.counterBump = 1;
-    this.particles.sparkles(L.counter[0] - 46, L.counter[1], 8, 180, 30);
+    this.particles.sparkles(L.gift.x, L.gift.y, 8, 180, 30);
     this.checkWin();
   }
 
@@ -448,6 +471,7 @@ export class GameScene {
     this.hint = null;
     this.aim = false;
     this.app.tw.wait(0.9).then(() => {
+      if (this.app.scene !== this) return;
       this.app.sfx('fail');
       this.app.addPopup(new FailPopup(this.app, this, reason));
     });
@@ -495,7 +519,12 @@ export class GameScene {
     this.state = 'won';
     const app = this.app;
     const reward = this.lv.hard ? 40 : 20;
+    const firstTime = this.n >= SAVE.data.level;
     SAVE.data.level = Math.max(SAVE.data.level, this.n + 1);
+    const S = SAVE.data.stats;
+    S.wins = (S.wins || 0) + 1;
+    if (firstTime && this.lv.hard) S.hard = (S.hard || 0) + 1;
+    if (this.hearts >= this.lv.hearts && this.continues === 0) S.perfect = (S.perfect || 0) + 1;
     persist(true);
     app.tw.wait(0.12).then(() => {
       app.sfx('win');
@@ -503,7 +532,7 @@ export class GameScene {
       this.particles.confetti(DW * 0.25, DH * 0.55, 50);
       this.particles.confetti(DW * 0.75, DH * 0.55, 50);
       return app.tw.wait(0.45);
-    }).then(() => app.addPopup(new WinPopup(app, this, reward)));
+    }).then(() => { if (app.scene === this) app.addPopup(new WinPopup(app, this, reward)); });
   }
 
   // переход дальше после победы
@@ -536,7 +565,11 @@ export class GameScene {
     if (key === 'hint') used = this.showHint(0);
     else if (key === 'magnet') used = this.useMagnet();
     else if (key === 'snowball') { this.aim = true; this.hint = null; return; }
-    if (used) { SAVE.data.boosters[key]--; persist(); }
+    if (used) {
+      SAVE.data.boosters[key]--;
+      SAVE.data.stats.boosters = (SAVE.data.stats.boosters || 0) + 1;
+      persist();
+    }
   }
 
   freeList() {
@@ -598,6 +631,7 @@ export class GameScene {
   useSnowballOn(a) {
     this.aim = false;
     SAVE.data.boosters.snowball--;
+    SAVE.data.stats.boosters = (SAVE.data.stats.boosters || 0) + 1;
     persist();
     const { w } = this.lv;
     this.grid[a.y * w + a.x] = -1;
@@ -645,7 +679,7 @@ export class GameScene {
     this.btnHint.badge = this.badgeOf('hint');
     this.btnMagnet.badge = this.badgeOf('magnet');
     this.btnSnow.badge = this.badgeOf('snowball');
-    this.btnSnow.style = this.aim ? 'gold' : 'blue';
+    this.btnSnow.glow = this.aim ? 0.6 + 0.4 * Math.sin(this.t * 8) : 0;
     this.particles.update(dt);
   }
 
@@ -719,8 +753,9 @@ export class GameScene {
       // стрелки для коробок дальше в очереди висят выше, чтобы не накладываться
       let depth = 0;
       for (let q = a.dest.box.waitFor; q && (q.state === 'wait' || q.state === 'enter' || q.state === 'open'); q = q.waitFor) depth++;
+      const kk = this.L.bk / 0.8;
       a.px = tgt.x;
-      a.py = tgt.y - 48 - depth * 44 + Math.sin(this.t * 7 + depth) * 4;
+      a.py = tgt.y - (48 + depth * 44) * kk + Math.sin(this.t * 7 + depth) * 4;
       a.size = tgt.size;
       if (a.dest.box.open) { f.phase = 'drop'; f.t = 0; f.sy = a.py; }
     } else if (f.phase === 'drop') {
@@ -736,9 +771,45 @@ export class GameScene {
   drawArrow(ctx, a, x, y, size, alpha = 1) {
     const sq = a.sq;
     const sx = 1 + 0.16 * sq, sy = 1 - 0.16 * sq;
-    const s = size * 1.1;
-    drawSprite(ctx, `ashadow_${a.dir}`, x, y + size * 0.07, s, { rot: a.rot, alpha: 0.9 * alpha, sx, sy });
+    const s = size * 1.04;
+    drawSprite(ctx, `ashadow_${a.dir}`, x + size * 0.02, y + size * 0.06, s, { rot: a.rot, alpha: 0.85 * alpha, sx, sy });
     drawSprite(ctx, `arrow_${a.color}_${a.dir}`, x, y, s, { rot: a.rot, alpha, sx, sy });
+  }
+
+  drawFrame(ctx, time) {
+    const F = this.L.frame;
+    drawNine(ctx, 'frame', F.x, F.y, F.w, F.h, F.bs);
+    // огоньки гирлянды мерцают
+    if (!this.bulbs.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const b of this.bulbs) {
+      const a = 0.5 + 0.5 * Math.sin(time * 2.6 + b.ph);
+      if (a < 0.12) continue;
+      const [x, y] = this.frameMap(b.x, b.y);
+      const r = (b.r * 2.4 + 8) * F.bs;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, `rgba(${b.c},${0.5 * a})`);
+      g.addColorStop(1, `rgba(${b.c},0)`);
+      ctx.fillStyle = g;
+      ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    ctx.restore();
+  }
+
+  // точка спрайта рамки (пиксели референса) -> экран, с учётом 9-slice
+  frameMap(px, py) {
+    const F = this.L.frame;
+    const [l, t, r, b] = meta('frame').slice;
+    const SW = FRAME[2] - FRAME[0], SH = FRAME[3] - FRAME[1];
+    const k = F.bs;
+    const mapAxis = (p, a0, a1, S, D) => {
+      if (p < a0) return p * k;
+      if (p > S - a1) return D - (S - p) * k;
+      const mid = D - (a0 + a1) * k;
+      return a0 * k + ((p - a0) / (S - a0 - a1)) * mid;
+    };
+    return [F.x + mapAxis(px, l, r, SW, F.w), F.y + mapAxis(py, t, b, SH, F.h)];
   }
 
   draw(ctx, time) {
@@ -748,11 +819,15 @@ export class GameScene {
       const m = (this.shakeT / 0.22) * 7;
       ctx.translate((Math.random() - 0.5) * m, (Math.random() - 0.5) * m);
     }
-    // поле
-    const bi = this.boardImg;
-    ctx.drawImage(bi.canvas, bi.x, bi.y, bi.w, bi.h);
-    drawSnowCap(ctx, bi.x + 10, bi.y + 4, bi.w - 20, this.n * 0.37, Math.min(22, L.cell * 0.28));
-    this.drawGarland(ctx, bi, time);
+    // поле в рамке с гирляндой
+    this.drawFrame(ctx, time);
+    const { w, h, mask } = this.lv;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!mask[y * w + x]) continue;
+        drawSprite(ctx, 'cell', L.bx + (x + 0.5) * L.cell, L.by + (y + 0.5) * L.cell, L.cell * 0.98);
+      }
+    }
     // подсветка подсказки
     if (this.hint && this.hint.t > 0 && this.hint.a.state === 'board') {
       const a = this.hint.a;
@@ -780,210 +855,185 @@ export class GameScene {
     }
     if (this.aim) {
       ctx.fillStyle = 'rgba(180,220,255,.12)';
-      ctx.fillRect(bi.x, bi.y, bi.w, bi.h);
+      ctx.fillRect(L.inner.x, L.inner.y, L.inner.w, L.inner.h);
     }
-    // коробки
+    // подарки в ячейках и «далее»
+    const sb = L.shelfBox;
+    drawAt(ctx, 'boxshelf', sb.x, sb.y, sb.k);
     this.drawBoxes(ctx, time);
     this.drawPreview(ctx);
-    // полка
-    drawSprite(ctx, 'shelf', L.shelfCX, L.shelfY, L.shelfW);
-    for (let i = 0; i < L.slots; i++) {
-      const p = this.slotPos(i);
-      drawSprite(ctx, 'nest', p.x, p.nestY, L.slotSp * 0.86);
-      if (this.lockedSlot && i === this.shelfCap) {
-        const k = 1 + Math.sin(time * 4) * 0.05;
-        drawSprite(ctx, 'lock', p.x, p.nestY - 30, L.slotSp * 0.5 * k);
-        drawSprite(ctx, 'video', p.x + L.slotSp * 0.26, p.nestY - 52, L.slotSp * 0.42, { rot: 0.15 });
-      }
-    }
+    // полка ожидания
+    this.drawWaitShelf(ctx, time);
     for (const a of this.arrows) if (a.state === 'shelf') this.drawArrow(ctx, a, a.px, a.py, a.size);
+    // доска с бонусами
+    const bb = L.boost;
+    drawAt(ctx, 'boostboard', bb.x, bb.y, bb.k);
     // летящие стрелки поверх всего
-    for (const a of this.arrows) if (a.state === 'flying' && a.fly) {
-      if (a.fly.phase === 'arc' && a.fly.t < 0) this.drawArrow(ctx, a, a.px, a.py, a.size);
-      else this.drawArrow(ctx, a, a.px, a.py, a.size);
-    }
+    for (const a of this.arrows) if (a.state === 'flying' && a.fly) this.drawArrow(ctx, a, a.px, a.py, a.size);
     this.particles.draw(ctx);
     ctx.restore();
     this.drawHUD(ctx, time);
   }
 
-  drawGarland(ctx, bi, time) {
-    const x0 = bi.x + 26, x1 = bi.x + bi.w - 26, y = bi.y + 10;
-    const swags = Math.max(2, Math.round((x1 - x0) / 200));
-    const sw = (x1 - x0) / swags;
-    const sag = Math.min(18, this.L.cap * 0.45);
-    ctx.strokeStyle = '#173a1f';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    for (let i = 0; i < swags; i++) {
-      ctx.moveTo(x0 + i * sw, y);
-      ctx.quadraticCurveTo(x0 + (i + 0.5) * sw, y + sag * 2, x0 + (i + 1) * sw, y);
-    }
-    ctx.stroke();
-    const cols = ['#ff4a5a', '#ffd23a', '#3aa0ff', '#38d06a', '#ff7ad1'];
-    let k = 0;
-    for (let i = 0; i < swags; i++) {
-      for (let j = 1; j < 6; j++) {
-        const t = j / 6;
-        const bx = x0 + (i + t) * sw;
-        const by = y + 2 * t * (1 - t) * sag * 2;
-        const on = 0.55 + 0.45 * Math.sin(time * 3 + k * 1.3);
-        const c = cols[k % cols.length];
-        const g = ctx.createRadialGradient(bx, by + 6, 1, bx, by + 6, 16);
-        g.addColorStop(0, c);
-        g.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.globalAlpha = 0.5 * on;
-        ctx.fillStyle = g;
-        ctx.beginPath(); ctx.arc(bx, by + 6, 16, 0, Math.PI * 2); ctx.fill();
-        ctx.globalAlpha = 0.65 + 0.35 * on;
-        ctx.fillStyle = c;
-        ctx.beginPath(); ctx.ellipse(bx, by + 7, 4.5, 6.5, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,.8)';
-        ctx.beginPath(); ctx.arc(bx - 1.5, by + 5, 1.6, 0, Math.PI * 2); ctx.fill();
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = '#2a3b2a';
-        ctx.fillRect(bx - 2.5, by - 1, 5, 4);
-        k++;
+  drawWaitShelf(ctx, time) {
+    const L = this.L;
+    const kk = L.wait.pitch / 66;
+    const ph = 34 * kk * 1.2;
+    const x0 = L.wait.cx - L.shelfW / 2;
+    // тень, доска, снег
+    ctx.fillStyle = 'rgba(10,5,20,.28)';
+    rr(ctx, x0 + 6, L.wait.top + ph * 0.55, L.shelfW - 12, ph * 0.7, ph * 0.35);
+    ctx.fill();
+    drawThree(ctx, 'plank', x0, L.wait.top - 2, L.shelfW, ph);
+    drawSnowCap(ctx, x0 + 6, L.wait.top + 1, L.shelfW - 12, 2.3, 9 * kk);
+    for (let i = 0; i < L.slots; i++) {
+      const p = this.slotPos(i);
+      drawSprite(ctx, 'nest', p.x, p.nestY + 2 * kk, L.slotSp * 0.8, { alpha: 0.85 });
+      if (this.lockedSlot && i === this.shelfCap) {
+        const k = 1 + Math.sin(time * 4) * 0.05;
+        drawSprite(ctx, 'lock', p.x, p.nestY - L.slotSp * 0.42, L.slotSp * 0.52 * k);
+        drawSprite(ctx, 'video', p.x + L.slotSp * 0.28, p.nestY - L.slotSp * 0.72, L.slotSp * 0.44, { rot: 0.15 });
       }
     }
   }
 
-  drawBoxes(ctx, time) {
-    const W = 150;
+  drawBoxes(ctx) {
+    const L = this.L;
     for (const b of this.boxes) {
       if (b.state === 'wait' || b.scale <= 0.01) continue;
-      const s = b.scale * BS;
+      const k = L.bk;
+      const s = b.scale;
       const sq = b.squash;
-      const sx = s * (1 + 0.1 * sq), sy = s * (1 - 0.1 * sq);
+      const sx = s * (1 + 0.08 * sq), sy = s * (1 - 0.08 * sq);
       ctx.save();
       ctx.globalAlpha = b.alpha;
-      ctx.translate(b.x, b.y + 40 * s);
+      // опора — низ коробки
+      ctx.translate(b.x, b.y + (BOX_H / 2) * k * s);
       ctx.rotate(b.rot);
       ctx.scale(sx, sy);
-      ctx.translate(0, -40);
-      drawSprite(ctx, `boxback_${b.color}`, 0, 0, W);
+      ctx.translate(0, -(BOX_H / 2) * k);
+      // стрелки внутри — выглядывают из-за передней стенки
       for (const a of b.items) {
         if (a.state !== 'inbox') continue;
-        const off = ITEM_OFF[a.dest.idx];
         const lift = a.sq * 6;
-        this.drawArrow(ctx, a, off, -24 - lift, 56);
+        this.drawArrow(ctx, a, ITEM_OFF[a.dest.idx] * k, (BOX_BODY_TOP - BOX_H / 2 - 10) * k - lift, 70 * k);
       }
-      drawSprite(ctx, `boxfront_${b.color}`, 0, 0, W);
-      if (b.lidA > 0) drawSprite(ctx, `lid_${b.color}`, 0, b.lidY, W, { alpha: b.lidA });
-      if (b.bowS > 0) drawSprite(ctx, b.color === 'gold' ? 'bow_red' : 'bow_gold', 0, BOW_REST, 92 * b.bowS);
+      drawSprite(ctx, `box_${b.color}`, 0, 0, BOX_W * k);
+      if (b.bowS > 0) {
+        const bow = b.color === 'gold' || b.color === 'orange' ? 'bow_red' : 'bow_gold';
+        const by = (30 - BOX_H / 2) * k; // центр банта
+        ctx.save();
+        ctx.translate(0, by);
+        ctx.scale(b.bowS, b.bowS);
+        drawSprite(ctx, bow, 0, -by, BOX_W * k);
+        ctx.restore();
+      }
       // счётчик заполненности
       if (b.state === 'open' || b.state === 'enter') {
         for (let i = 0; i < BOX_SIZE; i++) {
           const filled = i < b.landed;
-          ctx.fillStyle = filled ? '#ffffff' : 'rgba(0,0,0,.28)';
-          ctx.beginPath();
-          ctx.arc(-18 + i * 18, 52, 5.5, 0, Math.PI * 2);
-          ctx.fill();
+          const dx = (i - 1) * 20 * k, dy = 68 * k;
+          ctx.fillStyle = 'rgba(40,10,0,.45)';
+          ctx.beginPath(); ctx.arc(dx, dy + 1.5 * k, 7.5 * k, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = filled ? '#ffffff' : 'rgba(255,255,255,.35)';
+          ctx.beginPath(); ctx.arc(dx, dy, 6.5 * k, 0, Math.PI * 2); ctx.fill();
         }
       }
       ctx.restore();
     }
     if (this.magnetFx) {
       const b = this.magnetFx.box;
-      const k = this.magnetFx.t;
-      drawSprite(ctx, 'magnet', b.x + 70, b.y - 70 - Math.sin(k * 10) * 6, 70, { alpha: Math.min(1, (1 - k) * 3) });
+      const t = this.magnetFx.t;
+      const k = L.bk;
+      drawSprite(ctx, 'btn_magnet', b.x + 80 * k, b.y - 80 * k - Math.sin(t * 10) * 6, 86 * k, { alpha: Math.min(1, (1 - t) * 3) });
     }
   }
 
   drawPreview(ctx) {
     const L = this.L;
     const next = this.lv.queue.slice(this.qi, this.qi + 2);
-    if (!next.length) return;
-    const [x, y] = L.preview;
-    ctx.fillStyle = 'rgba(8,22,58,.55)';
-    if (L.previewRow) {
-      // строка: «далее» и мини-коробки
-      const wRow = 104 + next.length * 56;
-      const x0 = x - wRow / 2;
-      rr(ctx, x0, y - 27, wRow, 54, 27);
-      ctx.fill();
-      text(ctx, 'далее', x0 + 54, y + 1, 20, { stroke: null, weight: 800, color: '#bfe0ff' });
-      next.forEach((c, i) => {
-        const bx = x0 + 120 + i * 56;
-        drawSprite(ctx, `boxback_${c}`, bx, y + 2, 50, { alpha: 0.95 });
-        drawSprite(ctx, `boxfront_${c}`, bx, y + 2, 50, { alpha: 0.95 });
-      });
-      return;
-    }
-    rr(ctx, x - 38, y - 56, 76, 30 + next.length * 46, 20);
-    ctx.fill();
-    text(ctx, 'далее', x, y - 40, 18, { stroke: null, weight: 800, color: '#bfe0ff' });
+    const k = L.bk;
     next.forEach((c, i) => {
-      drawSprite(ctx, `boxback_${c}`, x, y + i * 46, 50, { alpha: 0.95 });
-      drawSprite(ctx, `boxfront_${c}`, x, y + i * 46, 50, { alpha: 0.95 });
+      const [x, y] = L.slotsPrev[i];
+      const w = 54 * k;
+      const bow = c === 'gold' || c === 'orange' ? 'bow_red' : 'bow_gold';
+      drawSprite(ctx, `box_${c}`, x, y + 3 * k, w);
+      drawSprite(ctx, bow, x, y + 3 * k, w);
     });
   }
 
   drawHUD(ctx, time) {
     const L = this.L;
-    // лента уровня
-    const [rx, ry, rw] = L.ribbon;
-    drawRibbon(ctx, rx, ry, rw, 72, this.lv.hard ? 'purple' : 'red');
-    text(ctx, `Уровень ${this.n}`, rx, ry - 3, 38, { stroke: this.lv.hard ? '#2e0a5c' : '#4a0710', maxW: rw - 40 });
+    // табличка уровня
+    const S = L.sign;
+    drawSign(ctx, S.x, S.y, S.k, `Уровень ${this.n}`, { size: 58 });
     if (this.lv.hard) {
-      ctx.fillStyle = '#2e0a5c';
-      rr(ctx, rx - 62, ry + 30, 124, 26, 13);
+      const pw = 190 * S.k, phh = 40 * S.k;
+      ctx.fillStyle = '#3a0f6a';
+      rr(ctx, S.x - pw / 2, S.y + 44 * S.k, pw, phh, phh / 2);
       ctx.fill();
-      text(ctx, 'СЛОЖНЫЙ', rx, ry + 43, 17, { stroke: null, color: '#ffd23a' });
+      ctx.strokeStyle = '#ffd23a';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      text(ctx, 'СЛОЖНЫЙ', S.x, S.y + 44 * S.k + phh / 2 + 1, 25 * S.k, { stroke: null, color: '#ffd23a' });
     }
     // сердечки
-    for (let i = 0; i < this.lv.hearts; i++) {
-      const x = L.heartsX + i * 52, y = L.heartsY;
+    for (let i = 0; i < this.lv.hearts && i < L.hearts.length; i++) {
+      const [x, y] = L.hearts[i];
       const fx = this.heartFx[i];
-      if (i < this.hearts) drawSprite(ctx, 'heart', x, y, 46 * (1 + Math.sin(time * 3 + i) * 0.03));
+      if (i < this.hearts) drawSprite(ctx, 'heart', x, y, L.heartW * (1 + Math.sin(time * 3 + i) * 0.03));
       else {
-        drawSprite(ctx, 'heart_empty', x, y, 42);
-        if (fx > 0) drawSprite(ctx, 'heart', x, y - (1 - fx) * 20, 46 * (1 + (1 - fx) * 0.5), { alpha: fx });
+        drawSprite(ctx, 'heart_empty', x, y, L.heartW * 0.92);
+        if (fx > 0) drawSprite(ctx, 'heart', x, y - (1 - fx) * 20, L.heartW * (1 + (1 - fx) * 0.5), { alpha: fx });
       }
     }
     // счётчик подарков
-    const [cx, cy] = L.counter;
+    const gp = L.giftPill;
+    drawCounterPill(ctx, gp.x, gp.y, gp.w, gp.h);
     const bump = 1 + this.counterBump * 0.25;
-    ctx.fillStyle = 'rgba(8,22,58,.6)';
-    rr(ctx, cx - 82, cy - 25, 164, 50, 25);
-    ctx.fill();
-    drawSprite(ctx, 'gift', cx - 52, cy - 2, 54 * bump);
-    text(ctx, `${this.boxesDone}/${this.lv.queue.length}`, cx + 18, cy + 1, 30 * bump, { stroke: '#0d2350' });
+    drawSprite(ctx, 'gift', L.gift.x, L.gift.y, L.gift.w * bump);
+    const tx = (L.gift.x + L.gift.w * 0.45 + gp.x + gp.w) / 2;
+    text(ctx, `${this.boxesDone}/${this.lv.queue.length}`, tx, gp.y + gp.h / 2 + 1, gp.h * 0.62 * bump, { stroke: '#0a1840', sw: gp.h * 0.1, maxW: gp.w * 0.55 });
     // монеты
-    const [mx, my] = L.coins;
-    ctx.fillStyle = 'rgba(8,22,58,.6)';
-    rr(ctx, mx - 86, my - 28, 176, 56, 28);
-    ctx.fill();
-    drawSprite(ctx, 'coin', mx - 62, my, 58);
-    text(ctx, String(Math.round(this.coinsShown)), mx + 14, my + 1, 32, { stroke: '#0d2350' });
+    const cp = L.coinPill;
+    drawCounterPill(ctx, cp.x, cp.y, cp.w, cp.h);
+    drawSprite(ctx, 'coin', L.coin.x, L.coin.y, L.coin.w);
+    const ctx2 = (L.coin.x + L.coin.w * 0.45 + cp.x + cp.w) / 2;
+    text(ctx, String(Math.round(this.coinsShown)), ctx2, cp.y + cp.h / 2 + 1, cp.h * 0.64, { stroke: '#0a1840', sw: cp.h * 0.1, maxW: cp.w * 0.55 });
     for (const b of this.buttons) b.draw(ctx, time);
-    // подпись бонусов
+    // подпись снежка
     if (this.aim) {
       const t = 'Выбери любую стрелку — снежок выбьет её!';
-      const y = L.by - L.pad - L.cap - 26;
-      ctx.fillStyle = 'rgba(8,22,58,.8)';
+      const y = L.inner.y + 30;
       ctx.font = `800 26px Nunito, Arial`;
-      const w = Math.min(this.app.view.DW - 30, ctx.measureText(t).width + 50);
-      rr(ctx, L.bx + (this.lv.w * L.cell) / 2 - w / 2, y - 24, w, 48, 24);
+      const w = Math.min(L.inner.w - 16, ctx.measureText(t).width + 50);
+      ctx.fillStyle = 'rgba(8,22,58,.86)';
+      rr(ctx, L.inner.x + L.inner.w / 2 - w / 2, y - 24, w, 48, 24);
       ctx.fill();
-      text(ctx, t, L.bx + (this.lv.w * L.cell) / 2, y + 1, 26, { stroke: null, weight: 800, maxW: w - 30 });
+      text(ctx, t, L.inner.x + L.inner.w / 2, y + 1, 26, { stroke: null, weight: 800, maxW: w - 30 });
     }
-    // подсказка-обучение
+    // подсказка-обучение (внизу поля)
     if (this.tipText && this.tipA > 0) {
-      const bw2 = Math.min(this.app.view.DW - 30, 640);
-      const x = L.bx + (this.lv.w * L.cell) / 2;
-      const y = this.app.view.landscape ? L.by + this.lv.h * L.cell + L.pad + 2 : (L.by + this.lv.h * L.cell + L.pad + L.shelfY - 70) / 2;
+      const lines = this.tipText.split('\n');
+      const bw2 = Math.min(L.inner.w - 16, 620);
+      const bh = 26 + lines.length * 34;
+      const x = L.inner.x + L.inner.w / 2;
+      const y = L.inner.y + L.inner.h - 8 - bh / 2;
       ctx.save();
       ctx.globalAlpha = this.tipA;
-      ctx.fillStyle = 'rgba(255,255,255,.95)';
-      const lines = this.tipText.split('\n');
-      const bh = 30 + lines.length * 36;
-      rr(ctx, x - bw2 / 2, y - bh / 2, bw2, bh, 26);
+      const g = ctx.createLinearGradient(0, y - bh / 2, 0, y + bh / 2);
+      g.addColorStop(0, '#fff3dc');
+      g.addColorStop(1, '#f6d6a2');
+      ctx.fillStyle = 'rgba(40,14,2,.35)';
+      rr(ctx, x - bw2 / 2, y - bh / 2 + 4, bw2, bh, 22);
       ctx.fill();
-      ctx.strokeStyle = '#2f7fe6';
+      ctx.fillStyle = g;
+      rr(ctx, x - bw2 / 2, y - bh / 2, bw2, bh, 22);
+      ctx.fill();
+      ctx.strokeStyle = '#a35a22';
       ctx.lineWidth = 4;
       ctx.stroke();
-      lines.forEach((ln, i) => text(ctx, ln, x, y + (i - (lines.length - 1) / 2) * 36 + 1, 29, { stroke: null, color: '#173a78', weight: 900, maxW: bw2 - 40 }));
+      lines.forEach((ln, i) => text(ctx, ln, x, y + (i - (lines.length - 1) / 2) * 34 + 1, 27, { stroke: null, color: '#5a2208', weight: 900, maxW: bw2 - 36 }));
       ctx.restore();
     }
     // рука-указатель
@@ -1004,8 +1054,7 @@ export class GameScene {
       ctx.fillRect(0, DH / 2 - 110, DW, 220);
       ctx.translate(DW / 2, DH / 2);
       ctx.scale(inK, inK);
-      drawRibbon(ctx, 0, 0, 470, 100, 'purple');
-      text(ctx, 'СЛОЖНЫЙ УРОВЕНЬ', 0, -4, 46, { stroke: '#2e0a5c', maxW: 420 });
+      drawSign(ctx, 0, 0, Math.min(1.05, (DW - 40) / 698), 'Сложный уровень', { size: 54, color: '#ffe36a', stroke: '#3a0f6a' });
       ctx.restore();
     }
   }

@@ -1,8 +1,12 @@
-// Интерфейс: кнопки, панели, ленты, текст. Всё рисуется в дизайн-единицах.
-import { drawSprite } from './art.js';
+// Интерфейс: кнопки, панели, таблички, текст. Всё рисуется в дизайн-единицах.
+import { drawSprite, drawThree, drawAt, spr } from './art.js';
 import { Ease } from './tween.js';
 
 export const FONT = 'Nunito, "Arial Rounded MT Bold", "Trebuchet MS", Arial, sans-serif';
+
+// цвета под деревянно-кремовый стиль референса
+export const INK = '#5a2a0c';      // тёмно-коричневый текст на кремовой панели
+export const INK_SOFT = '#8a4f22';
 
 export function rr(ctx, x, y, w, h, r) {
   r = Math.max(0, Math.min(r, w / 2, h / 2));
@@ -33,9 +37,9 @@ export function text(ctx, s, x, y, size, o = {}) {
   ctx.lineJoin = 'round';
   const sw = o.sw != null ? o.sw : size * 0.2;
   if (stroke && o.shadow !== false) {
-    ctx.strokeStyle = 'rgba(5,14,40,.35)';
+    ctx.strokeStyle = 'rgba(20,8,2,.35)';
     ctx.lineWidth = sw;
-    ctx.strokeText(s, x, y + size * 0.09);
+    ctx.strokeText(s, x, y + size * 0.08);
   }
   if (stroke) {
     ctx.strokeStyle = stroke;
@@ -51,45 +55,60 @@ export function text(ctx, s, x, y, size, o = {}) {
   return size;
 }
 
+// обводка текста под цвет кнопки
 export const STYLES = {
-  green: ['#9df57a', '#36b23a', '#1f7a22', '#124a17'],
-  blue: ['#86d0ff', '#2f7fe6', '#1b4fa0', '#102f66'],
-  red: ['#ff9292', '#e0303c', '#9a1420', '#5c0812'],
-  gold: ['#ffe680', '#f5a300', '#a8620a', '#6b3a00'],
-  purple: ['#dba6ff', '#8a45e0', '#55209c', '#331066'],
-  gray: ['#dfe5ee', '#9aa6b7', '#6b7788', '#424c5c'],
-  white: ['#ffffff', '#dce9f7', '#9fb2c9', '#4f6582'],
+  green: '#14561a', blue: '#0f3d86', red: '#6e0c14', gold: '#7a4300', purple: '#3c1474', gray: '#454c58',
 };
 
-export function drawButtonShape(ctx, x, y, w, h, style, pressed, round) {
-  const [top, bot, lip, border] = STYLES[style] || STYLES.green;
-  const r = round ? h / 2 : Math.min(h / 2, 30);
-  const depth = h * 0.11;
-  const off = pressed ? depth * 0.7 : 0;
-  ctx.fillStyle = 'rgba(5,16,42,.35)';
-  rr(ctx, x, y + 6, w, h, r);
-  ctx.fill();
-  ctx.fillStyle = border;
-  rr(ctx, x, y + off, w, h - off, r);
-  ctx.fill();
-  ctx.fillStyle = lip;
-  rr(ctx, x + 3, y + off + 3, w - 6, h - off - 6, r - 3);
-  ctx.fill();
-  const bodyH = h - 6 - depth;
-  const g = ctx.createLinearGradient(0, y + off, 0, y + off + bodyH);
-  g.addColorStop(0, top);
-  g.addColorStop(1, bot);
+// Кнопка-«таблетка» (как «Играть»): w×h — размер цветного тела кнопки
+export function drawPill(ctx, style, cx, cy, w, h) {
+  const name = 'btn_' + (STYLES[style] ? style : 'green');
+  const s = spr(name);
+  if (!s) return;
+  // тело кнопки в спрайте: x 18..522, y 37..169 из 550×210
+  const k = h / 132;
+  drawThree(ctx, name, cx - w / 2 - 18 * k, cy - h / 2 - 37 * k, w + 46 * k, 210 * k);
+}
+
+// Круглая глянцевая кнопка со снежной шапкой; d — диаметр круга
+export function drawRound(ctx, style, cx, cy, d) {
+  const name = 'round_' + (STYLES[style] ? style : 'blue');
+  const k = d / 106;
+  drawAt(ctx, name, cx - 63 * k, cy - 63 * k, k);
+}
+
+// Красный кружок-счётчик (как «3» на бонусах)
+export function drawBadge(ctx, x, y, r, label) {
+  ctx.save();
+  ctx.fillStyle = 'rgba(40,0,0,.35)';
+  ctx.beginPath(); ctx.arc(x, y + r * 0.12, r * 1.04, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  const g = ctx.createLinearGradient(0, y - r, 0, y + r);
+  g.addColorStop(0, '#ff6a6a');
+  g.addColorStop(0.55, '#e3192b');
+  g.addColorStop(1, '#a50a18');
   ctx.fillStyle = g;
-  rr(ctx, x + 3, y + 3 + off, w - 6, bodyH, r - 3);
+  ctx.beginPath(); ctx.arc(x, y, r * 0.84, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.35)';
+  ctx.beginPath(); ctx.ellipse(x - r * 0.25, y - r * 0.42, r * 0.38, r * 0.2, -0.4, 0, Math.PI * 2); ctx.fill();
+  text(ctx, String(label), x, y + r * 0.04, r * 1.05, { stroke: '#6e0610', sw: r * 0.26, shadow: false });
+  ctx.restore();
+}
+
+// Тёмная полупрозрачная «пилюля» под счётчиками (монеты, подарки)
+export function drawCounterPill(ctx, x, y, w, h) {
+  ctx.save();
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, 'rgba(10,22,66,.72)');
+  g.addColorStop(1, 'rgba(6,14,44,.72)');
+  ctx.fillStyle = g;
+  rr(ctx, x, y, w, h, h / 2);
   ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,.32)';
-  rr(ctx, x + 10, y + off + 7, w - 20, bodyH * 0.4, (r - 3) * 0.7);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,.75)';
-  ctx.beginPath();
-  ctx.ellipse(x + Math.min(r, w * 0.2) + 4, y + off + bodyH * 0.24 + 3, Math.min(10, w * 0.06), Math.min(6, h * 0.06), -0.4, 0, Math.PI * 2);
-  ctx.fill();
-  return off;
+  ctx.strokeStyle = 'rgba(140,180,255,.18)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.restore();
 }
 
 export class Button {
@@ -97,114 +116,79 @@ export class Button {
     Object.assign(this, {
       x: 0, y: 0, w: 260, h: 96, style: 'green', label: '', icon: null, iconW: 0, size: 40,
       onClick: null, visible: true, enabled: true, round: false, badge: null, pulse: false, sub: null, ad: false,
-      appear: 1,
+      appear: 1, sprite: null, spriteW: 0, spriteDY: 0, hitR: 0, badgeAt: null, badgeR: 22, glow: 0,
     }, o);
     this.pressed = false;
   }
 
   hit(px, py) {
     if (!this.visible || this.appear < 0.5) return false;
-    if (this.round) return Math.hypot(px - this.x, py - this.y) <= this.w / 2 + 6;
+    if (this.round || this.hitR) {
+      const r = this.hitR || this.w / 2 + 6;
+      return Math.hypot(px - this.x, py - this.y) <= r;
+    }
     return Math.abs(px - this.x) <= this.w / 2 + 4 && Math.abs(py - this.y) <= this.h / 2 + 4;
   }
 
   draw(ctx, time) {
     if (!this.visible || this.appear <= 0) return;
-    let s = this.appear * (this.pulse ? 1 + Math.sin(time * 5) * 0.035 : 1) * (this.pressed ? 0.97 : 1);
+    const s = this.appear * (this.pulse ? 1 + Math.sin(time * 5) * 0.03 : 1) * (this.pressed ? 0.95 : 1);
     ctx.save();
-    ctx.translate(this.x, this.y);
+    ctx.translate(this.x, this.y + (this.pressed ? 2 : 0));
     ctx.scale(s, s);
     const style = this.enabled ? this.style : 'gray';
-    const h = this.round ? this.w : this.h;
-    const off = drawButtonShape(ctx, -this.w / 2, -h / 2, this.w, h, style, this.pressed, this.round);
-    const cy = -h * 0.055 + off;
-    if (this.label) {
-      let lx = 0;
-      const iw = this.icon ? this.iconW || h * 0.62 : 0;
-      ctx.font = `900 ${this.size}px ${FONT}`;
-      const tw = Math.min(ctx.measureText(this.label).width, this.w - iw - 40);
-      if (this.icon) {
-        const total = iw + 12 + tw;
-        drawSprite(ctx, this.icon, -total / 2 + iw / 2, cy + (this.sub ? -8 : 0), iw);
-        lx = -total / 2 + iw + 12 + tw / 2;
+    if (!this.enabled) ctx.globalAlpha *= 0.92;
+    if (this.sprite) {
+      if (this.glow > 0) {
+        const r = (this.hitR || this.spriteW / 2) * 1.15;
+        const g = ctx.createRadialGradient(0, 0, r * 0.5, 0, 0, r);
+        g.addColorStop(0, `rgba(255,236,120,${0.55 * this.glow})`);
+        g.addColorStop(1, 'rgba(255,236,120,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
       }
-      text(ctx, this.label, lx, cy + (this.sub ? -10 : 0), this.size, { stroke: STYLES[style][3], sw: this.size * 0.18, maxW: this.w - iw - 40 });
-      if (this.sub) text(ctx, this.sub, lx, cy + this.size * 0.62, this.size * 0.5, { stroke: STYLES[style][3], sw: 5, maxW: this.w - 40 });
-    } else if (this.icon) {
-      drawSprite(ctx, this.icon, 0, cy, this.iconW || h * 0.58);
+      drawSprite(ctx, this.sprite, 0, this.spriteDY, this.spriteW || this.w);
+    } else if (this.round) {
+      drawRound(ctx, style, 0, 0, this.w);
+      if (this.icon) drawSprite(ctx, this.icon, 0, 2, this.iconW || this.w * 0.55);
+    } else {
+      drawPill(ctx, style, 0, 0, this.w, this.h);
+      const cy = -this.h * 0.03;
+      const stroke = STYLES[style] || STYLES.green;
+      if (this.label) {
+        let lx = 0;
+        const iw = this.icon ? this.iconW || this.h * 0.62 : 0;
+        ctx.font = `900 ${this.size}px ${FONT}`;
+        const tw = Math.min(ctx.measureText(this.label).width, this.w - iw - 40);
+        if (this.icon) {
+          const total = iw + 12 + tw;
+          drawSprite(ctx, this.icon, -total / 2 + iw / 2, cy + (this.sub ? -6 : 0), iw);
+          lx = -total / 2 + iw + 12 + tw / 2;
+        }
+        text(ctx, this.label, lx, cy + (this.sub ? -9 : 0), this.size, { stroke, sw: this.size * 0.2, maxW: this.w - iw - 40, color: '#fffbf0' });
+        if (this.sub) text(ctx, this.sub, lx, cy + this.size * 0.6, this.size * 0.5, { stroke, sw: 5, maxW: this.w - 40, color: '#fffbf0' });
+      } else if (this.icon) {
+        drawSprite(ctx, this.icon, 0, cy, this.iconW || this.h * 0.58);
+      }
     }
-    if (this.ad) drawSprite(ctx, 'video', this.w / 2 - 12, -h / 2 + 6, 46, { rot: 0.15 });
+    if (this.ad) drawSprite(ctx, 'video', this.w / 2 - 14, -(this.round ? this.w : this.h) / 2 + 4, 48, { rot: 0.15 });
     if (this.badge != null && this.badge !== '') {
-      const bx = this.w / 2 - 10, by = -h / 2 + 10;
-      ctx.fillStyle = '#5c0812';
-      ctx.beginPath(); ctx.arc(bx, by + 2, 19, 0, Math.PI * 2); ctx.fill();
-      const g = ctx.createLinearGradient(0, by - 17, 0, by + 17);
-      g.addColorStop(0, '#ff7a7a'); g.addColorStop(1, '#d81f2c');
-      ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(bx, by, 17, 0, Math.PI * 2); ctx.fill();
-      text(ctx, String(this.badge), bx, by + 1, 22, { stroke: '#5c0812', sw: 4, shadow: false });
+      const [bx, by] = this.badgeAt || [this.w / 2 - 10, -(this.round ? this.w : this.h) / 2 + 10];
+      drawBadge(ctx, bx, by, this.badgeR, this.badge);
     }
     ctx.restore();
   }
 }
 
-// Лента-баннер с подвёрнутыми концами
-export function drawRibbon(ctx, cx, cy, w, h, color = 'red') {
-  const C = color === 'purple'
-    ? { a: '#c27bff', b: '#7a2fc8', tail: '#5a1fa0', dark: '#2e0a5c' }
-    : color === 'green'
-      ? { a: '#6fe080', b: '#1f9a3a', tail: '#157030', dark: '#0a3d18' }
-      : { a: '#ff6670', b: '#c8162a', tail: '#94101f', dark: '#5c0812' };
-  const x0 = cx - w / 2, x1 = cx + w / 2, y0 = cy - h / 2, y1 = cy + h / 2;
-  const tw = h * 0.85, drop = h * 0.28, arch = h * 0.16;
-  ctx.lineJoin = 'round';
-  for (const side of [-1, 1]) {
-    const ex = side < 0 ? x0 : x1;
-    ctx.beginPath();
-    ctx.moveTo(ex - side * h * 0.2, y0 + drop);
-    ctx.lineTo(ex + side * tw, y0 + drop);
-    ctx.lineTo(ex + side * (tw - h * 0.3), cy + drop);
-    ctx.lineTo(ex + side * tw, y1 + drop);
-    ctx.lineTo(ex - side * h * 0.2, y1 + drop);
-    ctx.closePath();
-    ctx.fillStyle = C.tail;
-    ctx.fill();
-    ctx.strokeStyle = C.dark;
-    ctx.lineWidth = 4;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(ex, y1 - 2);
-    ctx.lineTo(ex - side * h * 0.2, y1 + drop);
-    ctx.lineTo(ex, y1 + drop);
-    ctx.closePath();
-    ctx.fillStyle = C.dark;
-    ctx.fill();
+// Табличка-доска со снегом и остролистом (как «Уровень 19»); надпись по центру доски
+// k — масштаб (дизайн-единиц на пиксель референса), (cx, cy) — центр надписи
+export function drawSign(ctx, cx, cy, k, label, o = {}) {
+  drawAt(ctx, 'sign', cx - 410 * k, cy - 70 * k, k);
+  if (label) {
+    text(ctx, label, cx, cy + 2 * k, (o.size || 56) * k, {
+      color: o.color || '#fff4dc', stroke: o.stroke || '#4a1a06', sw: (o.size || 56) * k * 0.2, maxW: 330 * k,
+    });
   }
-  ctx.beginPath();
-  ctx.moveTo(x0, y0);
-  ctx.quadraticCurveTo(cx, y0 - arch, x1, y0);
-  ctx.lineTo(x1, y1);
-  ctx.quadraticCurveTo(cx, y1 - arch, x0, y1);
-  ctx.closePath();
-  const g = ctx.createLinearGradient(0, y0 - arch, 0, y1);
-  g.addColorStop(0, C.a);
-  g.addColorStop(1, C.b);
-  ctx.fillStyle = g;
-  ctx.fill();
-  ctx.strokeStyle = C.dark;
-  ctx.lineWidth = 4.5;
-  ctx.stroke();
-  ctx.save();
-  ctx.setLineDash([8, 7]);
-  ctx.strokeStyle = 'rgba(255,230,160,.55)';
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.moveTo(x0 + 10, y0 + 8);
-  ctx.quadraticCurveTo(cx, y0 - arch + 8, x1 - 10, y0 + 8);
-  ctx.moveTo(x0 + 10, y1 - 8);
-  ctx.quadraticCurveTo(cx, y1 - arch - 8, x1 - 10, y1 - 8);
-  ctx.stroke();
-  ctx.restore();
 }
 
 // Снежная шапка вдоль верхнего края прямоугольника
@@ -224,10 +208,10 @@ export function drawSnowCap(ctx, x, y, w, seed = 1, thick = 18) {
   ctx.closePath();
   const g = ctx.createLinearGradient(0, y - thick, 0, y + thick);
   g.addColorStop(0, '#ffffff');
-  g.addColorStop(1, '#d3e8fa');
+  g.addColorStop(1, '#d6e6f8');
   ctx.fillStyle = g;
   ctx.fill();
-  ctx.strokeStyle = '#a9c8e4';
+  ctx.strokeStyle = 'rgba(150,180,215,.6)';
   ctx.lineWidth = 2;
   ctx.stroke();
   ctx.fillStyle = g;
@@ -243,33 +227,67 @@ export function drawSnowCap(ctx, x, y, w, seed = 1, thick = 18) {
   }
 }
 
-// Окно-попап
+// Деревянная панель с кремовой серединой (в стиле панели «Украшено» из меню)
 export function drawPanel(ctx, x, y, w, h) {
-  ctx.fillStyle = 'rgba(3,10,32,.45)';
-  rr(ctx, x - 2, y + 12, w + 4, h + 4, 40);
-  ctx.fill();
-  ctx.fillStyle = '#163a78';
-  rr(ctx, x, y, w, h, 40);
-  ctx.fill();
-  const g = ctx.createLinearGradient(0, y, 0, y + h);
-  g.addColorStop(0, '#f6fbff');
-  g.addColorStop(1, '#cde3f6');
-  ctx.fillStyle = g;
-  rr(ctx, x + 8, y + 8, w - 16, h - 16, 33);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,.9)';
-  ctx.lineWidth = 3;
-  rr(ctx, x + 12, y + 12, w - 24, h - 24, 30);
-  ctx.stroke();
-  // узор снежинок
+  const R = 38;
   ctx.save();
-  rr(ctx, x + 8, y + 8, w - 16, h - 16, 33);
+  ctx.fillStyle = 'rgba(10,4,0,.4)';
+  rr(ctx, x - 2, y + 12, w + 4, h + 4, R);
+  ctx.fill();
+  // деревянная рамка
+  let g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, '#d7894a');
+  g.addColorStop(0.5, '#b8642c');
+  g.addColorStop(1, '#8a4318');
+  ctx.fillStyle = g;
+  rr(ctx, x, y, w, h, R);
+  ctx.fill();
+  ctx.strokeStyle = '#5a2608';
+  ctx.lineWidth = 4;
+  ctx.stroke();
+  // светлый кант
+  ctx.strokeStyle = 'rgba(255,214,160,.55)';
+  ctx.lineWidth = 2.5;
+  rr(ctx, x + 5, y + 5, w - 10, h - 10, R - 5);
+  ctx.stroke();
+  // волокна дерева
+  ctx.save();
+  rr(ctx, x, y, w, h, R);
   ctx.clip();
-  for (let i = 0; i < 7; i++) {
-    drawSprite(ctx, 'flake' + (i % 3), x + 40 + ((i * 137) % (w - 80)), y + 90 + ((i * 211) % (h - 140)), 46 + (i % 3) * 14, { alpha: 0.13, rot: i });
+  ctx.strokeStyle = 'rgba(90,38,8,.22)';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 9; i++) {
+    const yy = y + 6 + ((i * 37) % Math.max(20, h - 12));
+    ctx.beginPath();
+    ctx.moveTo(x, yy);
+    ctx.bezierCurveTo(x + w * 0.3, yy - 4, x + w * 0.6, yy + 5, x + w, yy - 2);
+    ctx.stroke();
   }
   ctx.restore();
-  drawSnowCap(ctx, x + 6, y + 6, w - 12, w * 0.01, 22);
+  // кремовая середина
+  const ix = x + 16, iy = y + 16, iw = w - 32, ih = h - 32;
+  ctx.fillStyle = '#7a3a12';
+  rr(ctx, ix - 2, iy - 2, iw + 4, ih + 4, R - 12);
+  ctx.fill();
+  g = ctx.createLinearGradient(0, iy, 0, iy + ih);
+  g.addColorStop(0, '#fff1d6');
+  g.addColorStop(0.5, '#fbe0b2');
+  g.addColorStop(1, '#f1c98e');
+  ctx.fillStyle = g;
+  rr(ctx, ix, iy, iw, ih, R - 14);
+  ctx.fill();
+  // внутренняя тень сверху
+  ctx.save();
+  rr(ctx, ix, iy, iw, ih, R - 14);
+  ctx.clip();
+  g = ctx.createLinearGradient(0, iy, 0, iy + 26);
+  g.addColorStop(0, 'rgba(120,60,20,.28)');
+  g.addColorStop(1, 'rgba(120,60,20,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(ix, iy, iw, 26);
+  ctx.restore();
+  ctx.restore();
+  drawSnowCap(ctx, x + 10, y + 4, w - 20, w * 0.01, 20);
 }
 
 // Всплывающее окно с анимацией появления
@@ -298,11 +316,21 @@ export class Popup {
   }
 
   get cx() { return this.app.view.DW / 2; }
-  get cy() { return this.app.view.DH / 2; }
+  // окно всегда целиком на экране (с запасом под табличку заголовка)
+  get cy() {
+    const DH = this.app.view.DH;
+    return Math.max(this.h / 2 + 40, Math.min(DH / 2 + 14, DH - this.h / 2 - 8));
+  }
+
+  // общий масштаб окна, если оно не помещается на маленьком экране
+  get fit() {
+    const { DW, DH } = this.app.view;
+    return Math.min(1, (DW - 16) / this.w, (DH - 60) / this.h);
+  }
 
   update(dt) { this.t += dt; }
 
-  // кнопки задаются относительно центра окна: b.rx, b.ry
+  // кнопки задаются относительно центра окна (b.rx, b.ry) и живут в системе координат окна
   layoutButtons() {
     for (const b of this.buttons) {
       b.x = this.cx + (b.rx || 0);
@@ -310,22 +338,28 @@ export class Popup {
     }
   }
 
+  // перевод координат касания в систему окна (с учётом масштаба fit)
+  local(px, py) {
+    const f = this.fit;
+    return [this.cx + (px - this.cx) / f, this.cy + (py - this.cy) / f];
+  }
+
   draw(ctx, time) {
     const k = Math.max(0, this.k);
-    ctx.fillStyle = `rgba(4,10,32,${0.62 * Math.min(1, k)})`;
+    ctx.fillStyle = `rgba(6,10,30,${0.6 * Math.min(1, k)})`;
     ctx.fillRect(0, 0, this.app.view.DW, this.app.view.DH);
     ctx.save();
-    const sc = 0.6 + 0.4 * k;
+    const sc = (0.6 + 0.4 * k) * this.fit;
     ctx.translate(this.cx, this.cy);
     ctx.scale(sc, sc);
     ctx.translate(-this.cx, -this.cy);
     ctx.globalAlpha = Math.min(1, k * 1.5);
     const x = this.cx - this.w / 2, y = this.cy - this.h / 2;
     drawPanel(ctx, x, y, this.w, this.h);
-    drawSprite(ctx, 'holly', x + 34, y + 30, 120, { rot: -0.25 });
+    drawSprite(ctx, 'holly', x + this.w - 36, y + this.h - 24, 110, { rot: 0.4 });
     if (this.title) {
-      drawRibbon(ctx, this.cx, y + 6, Math.min(this.w - 90, 470), 84, this.titleColor);
-      text(ctx, this.title, this.cx, y + 2, 46, { stroke: '#4a0710', maxW: Math.min(this.w - 150, 420) });
+      const sk = Math.min(0.78, (this.w - 30) / 698);
+      drawSign(ctx, this.cx, y - 4, sk, this.title, { size: 60 });
     }
     this.drawContent(ctx, time, x, y);
     this.layoutButtons();
@@ -336,19 +370,25 @@ export class Popup {
   drawContent() {}
 
   pointerDown(px, py) {
-    for (const b of this.buttons) if (b.hit(px, py) && b.enabled) { b.pressed = true; return true; }
+    const [x, y] = this.local(px, py);
+    this.layoutButtons();
+    for (const b of this.buttons) if (b.hit(x, y) && b.enabled) { b.pressed = true; break; }
     return true;
   }
 
   pointerUp(px, py) {
+    const [x, y] = this.local(px, py);
+    this.layoutButtons();
+    let fire = null;
     for (const b of this.buttons) {
       if (b.pressed) {
         b.pressed = false;
-        if (b.hit(px, py) && b.onClick && !this.closing && this.k > 0.6) {
-          this.app.sfx('click');
-          b.onClick();
-        }
+        if (b.hit(x, y) && b.onClick && !this.closing && this.k > 0.6) fire = b;
       }
+    }
+    if (fire) {
+      this.app.sfx('click');
+      fire.onClick();
     }
     return true;
   }

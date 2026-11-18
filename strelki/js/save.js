@@ -15,6 +15,10 @@ export function defaultSave() {
     decor: 0, // сколько игрушек уже показано на ёлке
     favAsked: false,
     lastAd: 0,
+    // статистика для достижений
+    stats: { boxes: 0, hard: 0, perfect: 0, boosters: 0, wins: 0, bestStreak: 0 },
+    ach: {}, // id достижения -> true, если награда уже забрана
+    shop: { day: '', n: 0 }, // сколько раз сегодня брали монеты за рекламу
     ts: 0,
   };
 }
@@ -25,6 +29,9 @@ function merge(base, extra) {
   const out = { ...base, ...extra };
   out.boosters = { ...base.boosters, ...(extra.boosters || {}) };
   out.daily = { ...base.daily, ...(extra.daily || {}) };
+  out.stats = { ...base.stats, ...(extra.stats || {}) };
+  out.ach = { ...base.ach, ...(extra.ach || {}) };
+  out.shop = { ...base.shop, ...(extra.shop || {}) };
   return out;
 }
 
